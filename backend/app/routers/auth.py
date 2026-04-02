@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,6 +11,7 @@ from app.config import settings
 from app import models
 from app.schemas.user import UserCreate, UserOut, Token
 from app.deps import get_current_user
+from app.main import limiter
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -51,7 +52,8 @@ def _set_auth_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def register(body: UserCreate, db: AsyncSession = Depends(get_async_db)):
+@limiter.limit("10/hour")
+async def register(request: Request, body: UserCreate, db: AsyncSession = Depends(get_async_db)):
     existing = await db.execute(
         select(models.User).where(models.User.email == body.email)
     )
@@ -70,7 +72,9 @@ async def register(body: UserCreate, db: AsyncSession = Depends(get_async_db)):
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("20/minute")
 async def login(
+    request: Request,
     response: Response,
     form: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_db),

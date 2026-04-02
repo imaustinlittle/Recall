@@ -2,9 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select
 
 from app.config import settings
@@ -13,13 +17,15 @@ from app import models
 from app.routers import auth, meetings, upload, transcript, speakers, jobs
 from app.routers import admin
 
+limiter = Limiter(key_func=get_remote_address)
+
 logging.basicConfig(
     level=settings.log_level,
     format="%(asctime)s %(levelname)-8s %(name)s  %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-_SENSITIVE_SKIP = {"huggingface_token", "secret_key"}
+_SENSITIVE_SKIP = {"huggingface_token", "secret_key", "database_url", "database_sync_url", "redis_url"}
 
 
 async def _apply_db_settings() -> None:
@@ -82,12 +88,15 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # Serve uploaded media files directly in development.

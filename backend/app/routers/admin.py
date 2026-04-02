@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_async_db
-from app.deps import get_current_user
+from app.deps import get_current_admin
 from app.config import settings
 from app import models
 
@@ -129,12 +129,33 @@ def _coerce(key: str, raw: str) -> Any:
     return raw
 
 
+_SETTING_VALIDATORS: dict[str, Any] = {
+    "whisper_model":           lambda v: v in ["tiny", "base", "small", "medium", "large-v3"],
+    "whisper_device":          lambda v: v in ["cpu", "cuda"],
+    "whisper_compute_type":    lambda v: v in ["int8", "float16", "float32"],
+    "log_level":               lambda v: v.upper() in ["DEBUG", "INFO", "WARNING", "ERROR"],
+    "max_upload_bytes":        lambda v: v.isdigit() and int(v) > 0,
+    "access_token_expire_minutes": lambda v: v.isdigit() and int(v) >= 5,
+}
+
+
+def _validate_setting(key: str, raw: str) -> None:
+    """Raise HTTPException if the value is invalid for the given key."""
+    from fastapi import HTTPException
+    validator = _SETTING_VALIDATORS.get(key)
+    if validator and not validator(raw):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid value '{raw}' for setting '{key}'",
+        )
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/settings")
 async def get_settings(
     db: AsyncSession = Depends(get_async_db),
-    _: models.User = Depends(get_current_user),
+    _: models.User = Depends(get_current_admin),
 ):
     """
     Returns the settings schema enriched with current effective values.
@@ -177,7 +198,7 @@ async def get_settings(
 async def patch_settings(
     body: dict[str, str],
     db: AsyncSession = Depends(get_async_db),
-    _: models.User = Depends(get_current_user),
+    _: models.User = Depends(get_current_admin),
 ):
     """
     Upsert one or more settings overrides into the app_settings table.
@@ -193,6 +214,8 @@ async def patch_settings(
     needs_restart: list[str] = []
 
     for key, raw_value in body.items():
+        _validate_setting(key, raw_value)
+
         # Upsert into DB
         existing = await db.get(models.AppSetting, key)
         if existing:

@@ -15,7 +15,7 @@ router = APIRouter()
 async def list_meetings(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    status: str | None = None,
+    status: models.MeetingStatus | None = None,
     db: AsyncSession = Depends(get_async_db),
     current_user: models.User = Depends(get_current_user),
 ):
