@@ -24,8 +24,6 @@ redis==5.0.4
 
 # ── Media processing ───────────────────────────────────────────────────────
 faster-whisper==1.0.1
-nvidia-cublas-cu12
-nvidia-cudnn-cu12
 ffmpeg-python==0.2.0
 
 # ── Utilities ──────────────────────────────────────────────────────────────
