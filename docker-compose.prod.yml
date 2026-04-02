@@ -1,16 +1,18 @@
 # Production compose — pulls pre-built images from GHCR.
 #
-# Quick start:
-#   cp .env.example .env          # fill in POSTGRES_PASSWORD, SECRET_KEY, etc.
-#   docker compose -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.prod.yml up -d
+# Prerequisites:
+#   - Traefik running as a separate stack with an external network named "traefik_proxy"
+#   - ACME/Let's Encrypt configured in Traefik (entrypoints: web, websecure)
+#   - NVIDIA Container Toolkit installed on the host for GPU workers
 #
-# To pin a specific release instead of :main, set IMAGE_TAG in your .env:
+# Quick start:
+#   1. Set all required env vars in Portainer (see .env.example)
+#   2. Deploy this stack — Traefik will automatically provision TLS
+#
+# To pin a specific release instead of :main, set IMAGE_TAG in your env vars:
 #   IMAGE_TAG=1.2.0
 
 version: "3.9"
-
-x-image-tag: &image-tag ${IMAGE_TAG:-main}
 
 x-backend-common: &backend-common
   image: ghcr.io/imaustinlittle/recall/backend:${IMAGE_TAG:-main}
@@ -18,6 +20,8 @@ x-backend-common: &backend-common
   restart: unless-stopped
   volumes:
     - media_files:/data/media
+  networks:
+    - internal
   depends_on:
     postgres:
       condition: service_healthy
@@ -36,7 +40,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # Not exposed externally in production — access via the API container only
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -49,7 +54,8 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data:/data
-    # Not exposed externally in production
+    networks:
+      - internal
 
   # ── API ────────────────────────────────────────────────────────────────────
   api:
@@ -57,43 +63,79 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
-    ports:
-      - "8000:8000"
 
-  # ── Background worker ──────────────────────────────────────────────────────
-  worker:
+  # ── Background workers (one per GPU) ──────────────────────────────────────
+  worker-0:
     <<: *backend-common
     command: >
       celery -A app.workers.celery_app worker
         --loglevel=info
-        --concurrency=2
+        --concurrency=1
         --queues=transcription,default
-    # Uncomment if you have an NVIDIA GPU:
-    # environment:
-    #   CUDA_VISIBLE_DEVICES: "0"
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+        --hostname=worker-0@%h
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+
+  worker-1:
+    <<: *backend-common
+    command: >
+      celery -A app.workers.celery_app worker
+        --loglevel=info
+        --concurrency=1
+        --queues=transcription,default
+        --hostname=worker-1@%h
+    environment:
+      CUDA_VISIBLE_DEVICES: "1"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
 
   # ── Frontend ───────────────────────────────────────────────────────────────
+  # All traffic enters here. Next.js rewrites /api/*, /media/*, /ws/* to the
+  # api container internally — Traefik only needs to know about the frontend.
   frontend:
     image: ghcr.io/imaustinlittle/recall/frontend:${IMAGE_TAG:-main}
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    networks:
+      - internal
+      - traefik_proxy
     depends_on:
       - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_proxy"
+
+      # ── HTTPS router ──────────────────────────────────────────────────────
+      - "traefik.http.routers.recall.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.recall.entrypoints=websecure"
+      - "traefik.http.routers.recall.tls=true"
+      - "traefik.http.routers.recall.tls.certresolver=letsencrypt"
+      - "traefik.http.services.recall.loadbalancer.server.port=3000"
+
+      # ── HTTP → HTTPS redirect ──────────────────────────────────────────────
+      - "traefik.http.routers.recall-http.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.recall-http.entrypoints=web"
+      - "traefik.http.routers.recall-http.middlewares=recall-https-redirect"
+      - "traefik.http.middlewares.recall-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.recall-https-redirect.redirectscheme.permanent=true"
 
   # ── Celery monitor (optional, run with --profile monitor) ─────────────────
   flower:
     <<: *backend-common
     command: celery -A app.workers.celery_app flower --port=5555
     ports:
-      - "5555:5555"
+      - "5555:5555"   # bind to 0.0.0.0 — firewall this port externally
     profiles: ["monitor"]
 
   # ── MinIO (optional S3-compatible storage, run with --profile minio) ───────
@@ -106,10 +148,18 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     volumes:
       - minio_data:/data
+    networks:
+      - internal
     ports:
       - "9000:9000"
       - "9001:9001"
     profiles: ["minio"]
+
+networks:
+  internal:
+    driver: bridge
+  traefik_proxy:
+    external: true
 
 volumes:
   postgres_data:
