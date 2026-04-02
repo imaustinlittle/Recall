@@ -1,25 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth } from "@/lib/api";
+import { auth, setup } from "@/lib/api";
 import { Spinner } from "@/components/ui/Spinner";
+
+type Screen = "loading" | "setup" | "login";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<"login" | "register">("login");
+  const [screen, setScreen] = useState<Screen>("loading");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setup.status()
+      .then(({ needs_setup }) => setScreen(needs_setup ? "setup" : "login"))
+      .catch(() => setScreen("login"));
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      if (tab === "register") {
+      if (screen === "setup") {
         await auth.register(email, password, displayName);
       }
       await auth.login(email, password);
@@ -31,39 +39,34 @@ export default function LoginPage() {
     }
   };
 
+  if (screen === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold text-brand-600">Recall</h1>
           <p className="text-sm text-gray-500 mt-1">Record, transcribe, and recall your meetings.</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 mb-6">
-            {(["login", "register"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => { setTab(t); setError(""); }}
-                className={`flex-1 pb-2 text-sm font-medium capitalize transition-colors ${
-                  tab === t
-                    ? "border-b-2 border-brand-600 text-brand-600"
-                    : "text-gray-400 hover:text-gray-600"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+          {screen === "setup" && (
+            <div className="mb-6">
+              <h2 className="text-base font-semibold text-gray-800">Welcome! Set up your account</h2>
+              <p className="text-sm text-gray-500 mt-1">Create the admin account to get started.</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {tab === "register" && (
+            {screen === "setup" && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                 <input
                   type="text"
                   value={displayName}
@@ -74,9 +77,7 @@ export default function LoginPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 type="email"
                 value={email}
@@ -87,9 +88,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
                 type="password"
                 value={password}
@@ -102,9 +101,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                {error}
-              </p>
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
             )}
 
             <button
@@ -113,7 +110,7 @@ export default function LoginPage() {
               className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 rounded-lg text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {loading && <Spinner size="sm" />}
-              {tab === "login" ? "Sign in" : "Create account"}
+              {screen === "setup" ? "Create account" : "Sign in"}
             </button>
           </form>
         </div>

@@ -51,6 +51,14 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     )
 
 
+@router.get("/setup/status")
+async def setup_status(db: AsyncSession = Depends(get_async_db)):
+    """Returns whether initial setup is needed (no users exist yet)."""
+    result = await db.execute(select(models.User).limit(1))
+    needs_setup = result.scalar_one_or_none() is None
+    return {"needs_setup": needs_setup}
+
+
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/hour")
 async def register(request: Request, body: UserCreate, db: AsyncSession = Depends(get_async_db)):

@@ -41,6 +41,11 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+// ── Setup ──────────────────────────────────────────────────────────────────
+export const setup = {
+  status: () => request<{ needs_setup: boolean }>("/auth/setup/status"),
+};
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const auth = {
   register: (email: string, password: string, display_name?: string) =>
