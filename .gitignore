@@ -1,0 +1,30 @@
+cd /mnt/user/appdata/meetscribe
+cat > .gitignore << 'EOF'
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Alembic generated versions (optional — remove this line if you want migrations in git)
+# backend/alembic/versions/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+
+# Media files
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+EOF
