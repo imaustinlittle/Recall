@@ -2,7 +2,7 @@
 #
 # Prerequisites:
 #   - Traefik running as a separate stack with an external network named "traefik_proxy"
-#   - ACME/Let's Encrypt configured in Traefik (entrypoints: web, websecure)
+#   - ACME/Let's Encrypt configured in Traefik (entrypoints: http, https)
 #   - NVIDIA Container Toolkit installed on the host for GPU workers
 #
 # Quick start:
@@ -122,12 +122,6 @@ services:
       - "traefik.http.routers.recall.tls.certresolver=cloudflare"
       - "traefik.http.services.recall.loadbalancer.server.port=3000"
 
-      # ── HTTP → HTTPS redirect ──────────────────────────────────────────────
-      - "traefik.http.routers.recall-http.rule=Host(`recall.austlie.com`)"
-      - "traefik.http.routers.recall-http.entrypoints=http"
-      - "traefik.http.routers.recall-http.middlewares=recall-https-redirect"
-      - "traefik.http.middlewares.recall-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.recall-https-redirect.redirectscheme.permanent=true"
 
   # ── Celery monitor (optional, run with --profile monitor) ─────────────────
   flower:
