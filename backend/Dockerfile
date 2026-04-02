@@ -6,18 +6,19 @@ FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
 
 # System dependencies — single RUN to minimise layers
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3-pip python3.11-dev \
+    python3.11 python3.11-dev python3.11-venv \
     ffmpeg libmagic1 gcc pkg-config \
     libavformat-dev libavcodec-dev libavdevice-dev \
     libavutil-dev libswscale-dev libswresample-dev libavfilter-dev \
     && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && python3.11 -m ensurepip --upgrade \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Python deps before copying source so this layer is cached
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+RUN python3.11 -m pip install --upgrade pip && python3.11 -m pip install --no-cache-dir -r requirements.txt
 
 # Pre-download the Whisper model at build time so the first transcription
 # starts immediately. Override via: docker build --build-arg WHISPER_MODEL=small
