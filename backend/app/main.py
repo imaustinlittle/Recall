@@ -5,9 +5,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from app.config import settings
+from app.database import AsyncSessionLocal
+from app import models
 from app.routers import auth, meetings, upload, transcript, speakers, jobs
+from app.routers import admin
 
 logging.basicConfig(
     level=settings.log_level,
@@ -15,18 +19,62 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_SENSITIVE_SKIP = {"huggingface_token", "secret_key"}
+
+
+async def _apply_db_settings() -> None:
+    """
+    Load any saved overrides from the app_settings table and patch the live
+    settings object so all subsequent code sees the DB-configured values.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(select(models.AppSetting))).scalars().all()
+            for row in rows:
+                if not hasattr(settings, row.key):
+                    continue
+                # Coerce string value to the correct type
+                current = getattr(settings, row.key)
+                if isinstance(current, bool):
+                    coerced = row.value.lower() in ("true", "1", "yes")
+                elif isinstance(current, int):
+                    coerced = int(row.value)
+                else:
+                    coerced = row.value
+                setattr(settings, row.key, coerced)
+                key_display = "***" if row.key in _SENSITIVE_SKIP else row.value
+                logger.info(f"[config] DB override: {row.key} = {key_display}")
+    except Exception:
+        # DB might not be ready yet on very first startup — not fatal
+        logger.warning("[config] Could not load DB settings (will use env defaults)")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Path(settings.media_root).mkdir(parents=True, exist_ok=True)
+
+    # Apply DB-stored settings overrides on top of env vars
+    await _apply_db_settings()
+
+    if settings.secret_key_is_default:
+        logger.warning(
+            "⚠️  SECRET_KEY is set to the default placeholder value. "
+            "Generate a strong random key before exposing this service publicly."
+        )
+
     logger.info(f"Media root: {settings.media_root}")
-    logger.info(f"Whisper model: {settings.whisper_model} | diarization: {settings.use_diarization}")
+    logger.info(
+        f"Whisper model: {settings.whisper_model} | "
+        f"device: {settings.whisper_device} | "
+        f"diarization: {settings.use_diarization}"
+    )
+    logger.info(f"CORS origins: {settings.cors_origins_list}")
     yield
     logger.info("Shutting down")
 
 
 app = FastAPI(
-    title="Meetscribe API",
+    title="Recall API",
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/api/docs",
@@ -36,7 +84,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,6 +103,7 @@ app.include_router(upload.router,     prefix="/api",          tags=["upload"])
 app.include_router(transcript.router, prefix="/api",          tags=["transcript"])
 app.include_router(speakers.router,   prefix="/api",          tags=["speakers"])
 app.include_router(jobs.router,       prefix="/api",          tags=["jobs"])
+app.include_router(admin.router,      prefix="/api/admin",    tags=["admin"])
 
 
 @app.get("/api/health", tags=["health"])

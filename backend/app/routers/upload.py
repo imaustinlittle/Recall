@@ -18,7 +18,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".mov", ".webm", ".ogg", ".flac"}
-MAX_FILE_SIZE = 2 * 1024 ** 3  # 2 GB
 
 
 @router.post("/meetings/{meeting_id}/upload", response_model=JobOut)
@@ -39,6 +38,19 @@ async def upload_media(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
+    # Reject if a job is already active for this meeting
+    active = await db.execute(
+        select(models.Job).where(
+            models.Job.meeting_id == meeting_id,
+            models.Job.status.in_([models.JobStatus.queued, models.JobStatus.processing]),
+        )
+    )
+    if active.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail="A transcription job is already active for this meeting",
+        )
+
     # Validate file extension
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -54,8 +66,20 @@ async def upload_media(
     dest_path = dest_dir / f"{file_id}{suffix}"
 
     try:
+        bytes_written = 0
+        max_bytes = settings.max_upload_bytes
         with dest_path.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+            while chunk := file.file.read(1024 * 1024):  # 1 MB chunks
+                bytes_written += len(chunk)
+                if bytes_written > max_bytes:
+                    dest_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds maximum size of {max_bytes // (1024**3)} GB",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
     except Exception as exc:
         dest_path.unlink(missing_ok=True)
         logger.exception(f"Failed to save upload for meeting {meeting_id}")

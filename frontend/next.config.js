@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Required for the production Docker image (copies only what's needed to run)
+  output: "standalone",
+
   async rewrites() {
     return [
       {

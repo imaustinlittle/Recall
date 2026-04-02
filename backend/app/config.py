@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import ClassVar
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     minio_endpoint: str = "minio:9000"
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
-    minio_bucket: str = "meetscribe"
+    minio_bucket: str = "recall"
 
     # Whisper
     whisper_model: str = "base"
@@ -34,6 +35,17 @@ class Settings(BaseSettings):
     # Auth
     secret_key: str
     access_token_expire_minutes: int = 10080  # 7 days
+    _default_secret: ClassVar[str] = "change_me_to_a_long_random_string_in_production"
+
+    @property
+    def secret_key_is_default(self) -> bool:
+        return self.secret_key == self._default_secret
+
+    # CORS — comma-separated list of allowed origins
+    cors_origins: str = "http://localhost:3000"
+
+    # Upload
+    max_upload_bytes: int = 2 * 1024 ** 3  # 2 GB
 
     # App
     environment: str = "development"
@@ -42,6 +54,10 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.environment == "development"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache

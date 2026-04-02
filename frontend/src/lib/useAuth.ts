@@ -11,22 +11,17 @@ export function useAuth() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    // Auth state is determined by calling /me — the httpOnly cookie is sent
+    // automatically. No token in JavaScript storage.
     auth
       .me()
       .then((u) => setUser(u as User))
-      .catch(() => {
-        localStorage.removeItem("access_token");
-      })
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
-  const logout = () => {
-    auth.logout();
+  const logout = async () => {
+    await auth.logout();
     setUser(null);
     router.push("/login");
   };

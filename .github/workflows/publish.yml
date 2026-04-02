@@ -1,0 +1,109 @@
+name: Build & publish Docker images
+
+on:
+  push:
+    branches: [main]
+    tags:     ['v*']          # e.g. v1.0.0 → image tagged 1.0.0, 1.0, latest
+  workflow_dispatch:          # allow manual runs from the Actions tab
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository = imaustinlittle/recall
+  BACKEND_IMAGE:  ghcr.io/${{ github.repository }}/backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
+
+jobs:
+  # ── Backend (api + worker share one image) ──────────────────────────────
+  build-backend:
+    name: Backend image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            # branch builds → ghcr.io/.../backend:main
+            type=ref,event=branch
+            # PR builds    → ghcr.io/.../backend:pr-42
+            type=ref,event=pr
+            # semver tags  → 1.0.0, 1.0, latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # always tag with the short SHA for traceability
+            type=sha,prefix=sha-,format=short
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: ${{ github.event_name != 'pull_request' }}
+          tags:   ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            WHISPER_MODEL=base
+          # Layer cache stored in GitHub Actions cache — dramatically speeds up rebuilds
+          cache-from: type=gha,scope=backend
+          cache-to:   type=gha,mode=max,scope=backend
+
+  # ── Frontend ────────────────────────────────────────────────────────────
+  build-frontend:
+    name: Frontend image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: ${{ github.event_name != 'pull_request' }}
+          tags:   ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to:   type=gha,mode=max,scope=frontend

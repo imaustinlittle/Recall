@@ -1,32 +1,30 @@
 /**
  * Typed API client.
- * Reads the auth token from localStorage and attaches it to every request.
- * All methods throw on non-2xx responses with the server's error detail.
+ * Auth is handled via httpOnly cookies set by the login endpoint.
+ * All requests include credentials (cookies) automatically.
+ * No token storage in JavaScript — immune to XSS token theft.
  */
 
 const BASE = process.env.NEXT_PUBLIC_API_URL
   ? `${process.env.NEXT_PUBLIC_API_URL}/api`
   : "/api";
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("access_token");
-}
-
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     ...(options.body instanceof FormData
       ? {}
       : { "Content-Type": "application/json" }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string>),
   };
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",  // send/receive httpOnly auth cookie
+  });
 
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
@@ -57,19 +55,17 @@ export const auth = {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form.toString(),
+      credentials: "include",  // receive the httpOnly cookie
     });
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
       throw new Error(json.detail ?? "Login failed");
     }
-    const data = await res.json();
-    localStorage.setItem("access_token", data.access_token);
-    return data;
+    return res.json();
   },
 
-  logout: () => {
-    localStorage.removeItem("access_token");
-  },
+  logout: () =>
+    request("/auth/logout", { method: "POST" }).catch(() => {}),
 
   me: () => request("/auth/me"),
 };
@@ -102,11 +98,11 @@ export function uploadMedia(
   onProgress?: (pct: number) => void
 ): Promise<{ id: string; status: string; meeting_id: string }> {
   return new Promise((resolve, reject) => {
-    const token = getToken();
     const form = new FormData();
     form.append("file", file);
 
     const xhr = new XMLHttpRequest();
+    xhr.withCredentials = true;  // send auth cookie
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -130,7 +126,6 @@ export function uploadMedia(
     xhr.onerror = () => reject(new Error("Network error during upload"));
 
     xhr.open("POST", `${BASE}/meetings/${meetingId}/upload`);
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.send(form);
   });
 }
@@ -177,6 +172,16 @@ export const speakers = {
   merge: (meetingId: string, body: { source_id: string; target_id: string }) =>
     request(`/meetings/${meetingId}/speakers/merge`, {
       method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+export const adminApi = {
+  getSettings: () => request("/admin/settings"),
+  patchSettings: (body: Record<string, string>) =>
+    request("/admin/settings", {
+      method: "PATCH",
       body: JSON.stringify(body),
     }),
 };

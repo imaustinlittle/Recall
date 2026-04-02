@@ -7,6 +7,7 @@ from .transcript import TranscriptSegment
 from .note import Note, NoteType
 from .calendar import CalendarEvent
 from .job import Job, JobStatus, JobType
+from .app_setting import AppSetting
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "Note", "NoteType",
     "CalendarEvent",
     "Job", "JobStatus", "JobType",
+    "AppSetting",
 ]

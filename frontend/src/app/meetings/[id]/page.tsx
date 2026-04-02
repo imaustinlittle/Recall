@@ -7,6 +7,7 @@ import { Meeting, TranscriptSegment, Speaker, Job } from "@/lib/types";
 import { useJobStatus } from "@/lib/useJobStatus";
 import { useAuth } from "@/lib/useAuth";
 import { DropZone } from "@/components/upload/DropZone";
+import { RecordingPanel } from "@/components/recording/RecordingPanel";
 import { TranscriptViewer } from "@/components/transcript/TranscriptViewer";
 import { JobProgressBar } from "@/components/ui/JobProgressBar";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -140,9 +141,19 @@ export default function MeetingPage() {
           <JobProgressBar job={job} />
         )}
 
-        {/* Upload zone — show if no transcript yet and not processing */}
+        {/* Capture options — shown when no transcript and not already processing */}
         {!hasTranscript && !isProcessing && (
-          <DropZone meetingId={id} onUploaded={handleUploaded} />
+          <div className="space-y-3">
+            <RecordingPanel meetingId={id} onUploaded={handleUploaded} />
+
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              <div className="flex-1 border-t border-gray-200" />
+              <span>or upload an existing file</span>
+              <div className="flex-1 border-t border-gray-200" />
+            </div>
+
+            <DropZone meetingId={id} onUploaded={handleUploaded} />
+          </div>
         )}
 
         {/* Transcript */}

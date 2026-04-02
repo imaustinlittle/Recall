@@ -1,6 +1,6 @@
-# Meetscribe
+# Recall
 
-Self-hosted meeting transcription platform. Upload a recording, get a searchable, editable transcript with speaker labels — all running locally.
+Self-hosted meeting recorder and transcription platform. Record live calls or upload existing audio, and get a searchable, editable transcript with speaker labels — all running locally.
 
 ---
 
@@ -21,16 +21,11 @@ Self-hosted meeting transcription platform. Upload a recording, get a searchable
 
 ## Quick start
 
-### 1. Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / Mac) or Docker + Docker Compose (Linux)
-- 4 GB RAM minimum (8 GB recommended for `whisper-small` or larger)
-
-### 2. Clone and configure
+### Option A — Pull from GitHub Container Registry (recommended)
 
 ```bash
-git clone <your-repo>
-cd meetscribe
+curl -O https://raw.githubusercontent.com/imaustinlittle/recall/main/docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/imaustinlittle/recall/main/.env.example
 cp .env.example .env
 ```
 
@@ -41,32 +36,34 @@ POSTGRES_PASSWORD=pick_a_strong_password
 SECRET_KEY=pick_a_long_random_string
 ```
 
-### 3. Build and start
+Then pull and start:
 
 ```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Option B — Build from source
+
+```bash
+git clone https://github.com/imaustinlittle/recall.git
+cd recall
+cp .env.example .env
+# edit .env as above
 docker compose up --build
 ```
 
-First run downloads the Whisper model — takes 2–5 minutes depending on your connection.
+First run bakes the Whisper model into the image — takes 2–5 minutes.
 
-### 4. Run database migrations
-
-In a second terminal:
-
-```bash
-docker compose exec api alembic revision --autogenerate -m "initial_schema"
-docker compose exec api alembic upgrade head
-```
-
-### 5. Open the app
+### Open the app
 
 | Service | URL |
 |---|---|
-| App | http://localhost:3000 |
+| Recall | http://localhost:3000 |
 | API docs | http://localhost:8000/api/docs |
-| Celery monitor | http://localhost:5555 (run with `--profile dev`) |
+| Celery monitor | http://localhost:5555 (run with `--profile monitor`) |
 
-Register an account at http://localhost:3000/login, create a meeting, and upload a recording.
+Register an account at http://localhost:3000/login, create a meeting, and either record directly or upload an existing file.
 
 ---
 
@@ -102,6 +99,8 @@ To enable:
    ```
 5. Rebuild: `docker compose up --build`
 
+Or enable it from the **Settings** page in the Recall UI after first launch.
+
 ---
 
 ## Useful commands
@@ -116,10 +115,10 @@ docker compose exec api alembic revision --autogenerate -m "describe_change"
 docker compose exec api alembic upgrade head
 
 # Open a database shell
-docker compose exec postgres psql -U meetscribe -d meetscribe
+docker compose exec postgres psql -U recall -d recall
 
 # Start Celery monitor (Flower)
-docker compose --profile dev up flower
+docker compose --profile monitor up flower
 # → http://localhost:5555
 
 # Restart just the worker (after code changes)
@@ -137,7 +136,7 @@ docker compose down -v
 ## Project structure
 
 ```
-meetscribe/
+recall/
 ├── backend/
 │   ├── app/
 │   │   ├── models/          # SQLAlchemy ORM models
@@ -161,7 +160,7 @@ meetscribe/
 
 | Phase | Features |
 |---|---|
-| ✅ 1 — Core | Upload → transcribe → read transcript |
+| ✅ 1 — Core | Record or upload → transcribe → read transcript |
 | 2 — Editor | Inline editing, split/merge segments, timestamped notes |
 | 3 — Search & Calendar | Full-text search, Google Calendar / CalDAV sync |
 | 4 — AI | Summaries, action item extraction, Q&A over transcripts |

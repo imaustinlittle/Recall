@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Meetscribe",
-  description: "Self-hosted meeting transcription",
+  title: "Recall",
+  description: "Record, transcribe, and recall your meetings.",
 };
 
 export default function RootLayout({

@@ -36,8 +36,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-brand-600">Meetscribe</h1>
-          <p className="text-sm text-gray-500 mt-1">Self-hosted meeting transcription</p>
+          <h1 className="text-2xl font-semibold text-brand-600">Recall</h1>
+          <p className="text-sm text-gray-500 mt-1">Record, transcribe, and recall your meetings.</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">

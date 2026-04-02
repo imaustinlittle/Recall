@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,6 +14,8 @@ from app.deps import get_current_user
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+COOKIE_NAME = "access_token"
 
 
 def hash_password(password: str) -> str:
@@ -32,6 +34,19 @@ def create_access_token(user_id: str) -> str:
         {"sub": user_id, "exp": expire},
         settings.secret_key,
         algorithm="HS256",
+    )
+
+
+def _set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="strict",
+        # Only set Secure flag in production (requires HTTPS)
+        secure=not settings.is_dev,
+        max_age=settings.access_token_expire_minutes * 60,
+        path="/",
     )
 
 
@@ -56,6 +71,7 @@ async def register(body: UserCreate, db: AsyncSession = Depends(get_async_db)):
 
 @router.post("/login", response_model=Token)
 async def login(
+    response: Response,
     form: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_db),
 ):
@@ -69,7 +85,14 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return Token(access_token=create_access_token(str(user.id)))
+    token = create_access_token(str(user.id))
+    _set_auth_cookie(response, token)
+    return Token(access_token=token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response):
+    response.delete_cookie(key=COOKIE_NAME, path="/")
 
 
 @router.get("/me", response_model=UserOut)

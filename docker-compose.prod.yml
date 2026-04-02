@@ -1,0 +1,118 @@
+# Production compose — pulls pre-built images from GHCR.
+#
+# Quick start:
+#   cp .env.example .env          # fill in POSTGRES_PASSWORD, SECRET_KEY, etc.
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# To pin a specific release instead of :main, set IMAGE_TAG in your .env:
+#   IMAGE_TAG=1.2.0
+
+version: "3.9"
+
+x-image-tag: &image-tag ${IMAGE_TAG:-main}
+
+x-backend-common: &backend-common
+  image: ghcr.io/imaustinlittle/recall/backend:${IMAGE_TAG:-main}
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - media_files:/data/media
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Not exposed externally in production — access via the API container only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Cache / Queue ──────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    # Not exposed externally in production
+
+  # ── API ────────────────────────────────────────────────────────────────────
+  api:
+    <<: *backend-common
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    ports:
+      - "8000:8000"
+
+  # ── Background worker ──────────────────────────────────────────────────────
+  worker:
+    <<: *backend-common
+    command: >
+      celery -A app.workers.celery_app worker
+        --loglevel=info
+        --concurrency=2
+        --queues=transcription,default
+    # Uncomment if you have an NVIDIA GPU:
+    # environment:
+    #   CUDA_VISIBLE_DEVICES: "0"
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  frontend:
+    image: ghcr.io/imaustinlittle/recall/frontend:${IMAGE_TAG:-main}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  # ── Celery monitor (optional, run with --profile monitor) ─────────────────
+  flower:
+    <<: *backend-common
+    command: celery -A app.workers.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    profiles: ["monitor"]
+
+  # ── MinIO (optional S3-compatible storage, run with --profile minio) ───────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    profiles: ["minio"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_files:
+  minio_data:
