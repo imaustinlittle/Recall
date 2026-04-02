@@ -16,7 +16,6 @@ version: "3.9"
 
 x-backend-common: &backend-common
   image: ghcr.io/imaustinlittle/recall/backend:${IMAGE_TAG:-main}
-  env_file: .env
   restart: unless-stopped
   volumes:
     - media_files:/data/media
