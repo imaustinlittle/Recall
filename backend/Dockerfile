@@ -7,7 +7,9 @@ FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
 # System dependencies — single RUN to minimise layers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 python3-pip python3.11-dev \
-    ffmpeg libmagic1 gcc \
+    ffmpeg libmagic1 gcc pkg-config \
+    libavformat-dev libavcodec-dev libavdevice-dev \
+    libavutil-dev libswscale-dev libswresample-dev libavfilter-dev \
     && ln -sf /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
