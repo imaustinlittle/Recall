@@ -15,7 +15,7 @@ WORKDIR /app
 
 # Install Python deps before copying source so this layer is cached
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Pre-download the Whisper model at build time so the first transcription
 # starts immediately. Override via: docker build --build-arg WHISPER_MODEL=small
