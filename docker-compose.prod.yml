@@ -26,6 +26,12 @@ x-backend-common: &backend-common
       condition: service_healthy
     redis:
       condition: service_started
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    DATABASE_SYNC_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    SECRET_KEY: ${SECRET_KEY}
+    CORS_ORIGINS: https://recall.austlie.com
+    ENVIRONMENT: production
 
 services:
 
