@@ -116,15 +116,15 @@ services:
       - "traefik.docker.network=traefik_proxy"
 
       # ── HTTPS router ──────────────────────────────────────────────────────
-      - "traefik.http.routers.recall.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.recall.entrypoints=websecure"
+      - "traefik.http.routers.recall.rule=Host(`recall.austlie.com`)"
+      - "traefik.http.routers.recall.entrypoints=https"
       - "traefik.http.routers.recall.tls=true"
-      - "traefik.http.routers.recall.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.recall.tls.certresolver=cloudflare"
       - "traefik.http.services.recall.loadbalancer.server.port=3000"
 
       # ── HTTP → HTTPS redirect ──────────────────────────────────────────────
-      - "traefik.http.routers.recall-http.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.recall-http.entrypoints=web"
+      - "traefik.http.routers.recall-http.rule=Host(`recall.austlie.com`)"
+      - "traefik.http.routers.recall-http.entrypoints=http"
       - "traefik.http.routers.recall-http.middlewares=recall-https-redirect"
       - "traefik.http.middlewares.recall-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.middlewares.recall-https-redirect.redirectscheme.permanent=true"
