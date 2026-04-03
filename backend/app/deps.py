@@ -1,8 +1,8 @@
 import uuid
 from typing import Optional
 
+import jwt
 from fastapi import Cookie, Depends, HTTPException, Request, status
-from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -45,11 +45,12 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise _CREDENTIALS_EXC
-    except JWTError:
+        uid = uuid.UUID(user_id)
+    except (jwt.PyJWTError, ValueError):
         raise _CREDENTIALS_EXC
 
     result = await db.execute(
-        select(models.User).where(models.User.id == uuid.UUID(user_id))
+        select(models.User).where(models.User.id == uid)
     )
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:

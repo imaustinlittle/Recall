@@ -1,7 +1,6 @@
 import uuid
 import json
 import logging
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -187,10 +186,11 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
                 j = db2.query(models.Job).filter_by(meeting_id=meeting_id).first()
                 if j:
                     j.status = models.JobStatus.failed
+                    # Store only the error type and message — not the full traceback,
+                    # which can expose server file paths and internal details.
                     j.error_info = {
                         "error": str(exc),
                         "type": type(exc).__name__,
-                        "traceback": traceback.format_exc(),
                     }
                     j.completed_at = datetime.now(timezone.utc)
                 m = db2.get(models.Meeting, uuid.UUID(meeting_id))

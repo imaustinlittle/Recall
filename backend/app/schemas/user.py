@@ -19,6 +19,14 @@ class UserCreate(BaseModel):
             raise ValueError("Password must contain at least one digit")
         return v
 
+    @field_validator("display_name")
+    @classmethod
+    def sanitize_display_name(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) > 120:
+            raise ValueError("Display name must be 120 characters or fewer")
+        return v
+
 
 class UserOut(BaseModel):
     id: uuid.UUID

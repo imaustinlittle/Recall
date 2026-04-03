@@ -1,8 +1,8 @@
 import uuid
-import shutil
 import logging
 from pathlib import Path
 
+import magic
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -18,6 +18,31 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".mov", ".webm", ".ogg", ".flac"}
+
+ALLOWED_MIMES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/aac",
+    "video/mp4",
+    "video/quicktime",
+    "video/webm",
+    "audio/ogg",
+    "audio/flac",
+    "audio/x-flac",
+    "application/ogg",
+}
+
+
+def _safe_filename(raw: str | None, fallback: str) -> str:
+    """Strip path components and limit length to protect the DB column (500 chars)."""
+    if not raw:
+        return fallback
+    name = Path(raw).name  # strip any directory traversal
+    return name[:255] if name else fallback
 
 
 @router.post("/meetings/{meeting_id}/upload", response_model=JobOut)
@@ -56,7 +81,7 @@ async def upload_media(
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported format '{suffix}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
+            detail=f"Unsupported format '{suffix}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
     # Stream file to disk — never load large files fully into memory
@@ -80,21 +105,30 @@ async def upload_media(
                 f.write(chunk)
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         dest_path.unlink(missing_ok=True)
         logger.exception(f"Failed to save upload for meeting {meeting_id}")
-        raise HTTPException(status_code=500, detail="Failed to save file") from exc
+        raise HTTPException(status_code=500, detail="Failed to save file")
+
+    # Validate actual MIME type against file content (not just extension)
+    detected_mime = magic.from_file(str(dest_path), mime=True)
+    if detected_mime not in ALLOWED_MIMES:
+        dest_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail=f"File content type '{detected_mime}' is not an accepted audio/video format",
+        )
 
     file_size = dest_path.stat().st_size
-    logger.info(f"Saved upload: {dest_path} ({file_size:,} bytes)")
+    logger.info(f"Saved upload: {dest_path} ({file_size:,} bytes, mime={detected_mime})")
 
     # Persist MediaFile record
     media = models.MediaFile(
         id=file_id,
         meeting_id=meeting_id,
         file_path=str(dest_path),
-        original_filename=file.filename or f"{file_id}{suffix}",
-        mime_type=file.content_type,
+        original_filename=_safe_filename(file.filename, f"{file_id}{suffix}"),
+        mime_type=detected_mime,
         file_size_bytes=file_size,
         storage_backend=settings.storage_backend,
     )

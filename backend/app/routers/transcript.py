@@ -142,7 +142,7 @@ async def merge_segments(
     segs = result.scalars().all()
 
     if len(segs) < 2:
-        raise HTTPException(status_code=422, detail="Need at least 2 segments to merge")
+        raise HTTPException(status_code=422, detail="One or more segment IDs not found")
 
     # Merge into first segment
     first = segs[0]

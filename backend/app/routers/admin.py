@@ -129,13 +129,23 @@ def _coerce(key: str, raw: str) -> Any:
     return raw
 
 
+def _validate_cors_origins(v: str) -> bool:
+    """Every comma-separated origin must start with http:// or https://.
+    Wildcards (*) and bare hostnames are rejected."""
+    parts = [o.strip() for o in v.split(",") if o.strip()]
+    if not parts:
+        return False
+    return all(o.startswith(("http://", "https://")) for o in parts)
+
+
 _SETTING_VALIDATORS: dict[str, Any] = {
     "whisper_model":           lambda v: v in ["tiny", "base", "small", "medium", "large-v3"],
     "whisper_device":          lambda v: v in ["cpu", "cuda"],
     "whisper_compute_type":    lambda v: v in ["int8", "float16", "float32"],
     "log_level":               lambda v: v.upper() in ["DEBUG", "INFO", "WARNING", "ERROR"],
-    "max_upload_bytes":        lambda v: v.isdigit() and int(v) > 0,
+    "max_upload_bytes":        lambda v: v.isdigit() and 1 <= int(v) <= 10 * 1024 ** 3,
     "access_token_expire_minutes": lambda v: v.isdigit() and int(v) >= 5,
+    "cors_origins":            _validate_cors_origins,
 }
 
 

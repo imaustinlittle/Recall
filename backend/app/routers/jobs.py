@@ -1,9 +1,8 @@
 import uuid
-import asyncio
 import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
+import jwt
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -74,7 +73,7 @@ async def job_progress_ws(
         if not user_id:
             await websocket.close(code=4001)
             return
-    except JWTError:
+    except (jwt.PyJWTError, ValueError):
         await websocket.close(code=4001)
         return
 
