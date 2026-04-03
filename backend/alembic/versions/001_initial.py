@@ -17,20 +17,28 @@ depends_on = None
 def upgrade() -> None:
     # ── Enum types ─────────────────────────────────────────────────────────
     op.execute("""
-        CREATE TYPE IF NOT EXISTS meetingstatus AS ENUM
-          ('pending','uploading','queued','processing','transcribed','failed')
+        DO $$ BEGIN
+            CREATE TYPE meetingstatus AS ENUM ('pending','uploading','queued','processing','transcribed','failed');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
     op.execute("""
-        CREATE TYPE IF NOT EXISTS jobstatus AS ENUM
-          ('queued','processing','completed','failed','cancelled')
+        DO $$ BEGIN
+            CREATE TYPE jobstatus AS ENUM ('queued','processing','completed','failed','cancelled');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
     op.execute("""
-        CREATE TYPE IF NOT EXISTS jobtype AS ENUM
-          ('transcription','diarization','export')
+        DO $$ BEGIN
+            CREATE TYPE jobtype AS ENUM ('transcription','diarization','export');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
     op.execute("""
-        CREATE TYPE IF NOT EXISTS notetype AS ENUM
-          ('general','action_item','decision','question')
+        DO $$ BEGIN
+            CREATE TYPE notetype AS ENUM ('general','action_item','decision','question');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
 
     # ── users ──────────────────────────────────────────────────────────────
