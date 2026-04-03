@@ -11,7 +11,7 @@ from app.config import settings
 from app import models
 from app.schemas.user import UserCreate, UserOut, Token
 from app.deps import get_current_user
-from app.main import limiter
+from app.limiter import limiter
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
