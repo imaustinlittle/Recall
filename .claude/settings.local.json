@@ -8,7 +8,8 @@
       "Bash(xargs -I{} gh run view {} --log-failed)",
       "WebSearch",
       "Bash(python3 -c \"import secrets; print\\(secrets.token_hex\\(32\\)\\)\")",
-      "Bash(git -C \"c:\\\\Users\\\\imaus\\\\OneDrive\\\\Documents 1\\\\git\\\\Recall\" ls-files .env)"
+      "Bash(git -C \"c:\\\\Users\\\\imaus\\\\OneDrive\\\\Documents 1\\\\git\\\\Recall\" ls-files .env)",
+      "Bash(python3 -c \"import secrets; print\\('SECRET_KEY=' + secrets.token_hex\\(32\\)\\); print\\('POSTGRES_PASSWORD=' + secrets.token_urlsafe\\(24\\)\\)\")"
     ]
   }
 }
