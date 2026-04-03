@@ -17,19 +17,19 @@ depends_on = None
 def upgrade() -> None:
     # ── Enum types ─────────────────────────────────────────────────────────
     op.execute("""
-        CREATE TYPE meetingstatus AS ENUM
+        CREATE TYPE IF NOT EXISTS meetingstatus AS ENUM
           ('pending','uploading','queued','processing','transcribed','failed')
     """)
     op.execute("""
-        CREATE TYPE jobstatus AS ENUM
+        CREATE TYPE IF NOT EXISTS jobstatus AS ENUM
           ('queued','processing','completed','failed','cancelled')
     """)
     op.execute("""
-        CREATE TYPE jobtype AS ENUM
+        CREATE TYPE IF NOT EXISTS jobtype AS ENUM
           ('transcription','diarization','export')
     """)
     op.execute("""
-        CREATE TYPE notetype AS ENUM
+        CREATE TYPE IF NOT EXISTS notetype AS ENUM
           ('general','action_item','decision','question')
     """)
 
