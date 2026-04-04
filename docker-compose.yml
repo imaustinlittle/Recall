@@ -123,16 +123,17 @@ services:
     networks:
       - internal
       - traefik_proxy
+      - media-net
     labels:
       - "traefik.enable=true"
       # ── HTTPS router ────────────────────────────────────────────────────
       - "traefik.http.routers.recall.rule=Host(`recall.austlie.com`)"
-      - "traefik.http.routers.recall.entrypoints=websecure"
-      - "traefik.http.routers.recall.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.recall.entrypoints=https"
+      - "traefik.http.routers.recall.tls.certresolver=cloudflare"
       - "traefik.http.services.recall.loadbalancer.server.port=3000"
       # ── HTTP → HTTPS redirect ────────────────────────────────────────────
       - "traefik.http.routers.recall-http.rule=Host(`recall.austlie.com`)"
-      - "traefik.http.routers.recall-http.entrypoints=web"
+      - "traefik.http.routers.recall-http.entrypoints=http"
       - "traefik.http.routers.recall-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
@@ -156,6 +157,8 @@ networks:
   internal:
     driver: bridge
   traefik_proxy:
+    external: true
+  media-net:
     external: true
 
 volumes:
