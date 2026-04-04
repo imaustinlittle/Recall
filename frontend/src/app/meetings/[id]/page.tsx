@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi } from "@/lib/api";
+import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi } from "@/lib/api";
 import { Meeting, TranscriptSegment, Speaker, Job } from "@/lib/types";
 import { useJobStatus } from "@/lib/useJobStatus";
 import { useAuth } from "@/lib/useAuth";
@@ -27,6 +27,7 @@ export default function MeetingPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(
     searchParams.get("job")
   );
+  const [jobsLoaded, setJobsLoaded] = useState(false);
 
   // Watch job progress via WS/polling
   const job = useJobStatus(activeJobId);
@@ -48,6 +49,17 @@ export default function MeetingPage() {
     if (user) {
       loadMeeting();
       loadTranscript();
+      // Reconnect to any active job if we navigated back without a ?job= param
+      if (!searchParams.get("job")) {
+        jobsApi.list(id).then((list: any) => {
+          const active = list?.find((j: any) =>
+            j.status === "processing" || j.status === "queued"
+          );
+          if (active) setActiveJobId(active.id);
+        }).finally(() => setJobsLoaded(true));
+      } else {
+        setJobsLoaded(true);
+      }
     }
   }, [user, id]);
 
