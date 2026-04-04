@@ -89,7 +89,7 @@ services:
       - api
     networks:
       - internal
-      - traefik        # must be on the same network as your Traefik container
+      - traefik_proxy
     labels:
       - "traefik.enable=true"
       # ── HTTPS router ────────────────────────────────────────────────────
@@ -122,8 +122,8 @@ services:
 networks:
   internal:
     driver: bridge
-  traefik:
-    external: true   # must match the network name your Traefik container is on
+  traefik_proxy:
+    external: true
 
 volumes:
   postgres_data:
