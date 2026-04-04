@@ -16,7 +16,7 @@ import { useJobStatus } from "@/lib/useJobStatus";
 import { useAuth } from "@/lib/useAuth";
 import { DropZone } from "@/components/upload/DropZone";
 import { RecordingPanel } from "@/components/recording/RecordingPanel";
-import { TranscriptViewer } from "@/components/transcript/TranscriptViewer";
+import { TranscriptViewer, TranscriptViewerHandle } from "@/components/transcript/TranscriptViewer";
 import { JobProgressBar } from "@/components/ui/JobProgressBar";
 import { AudioPlayer } from "@/components/ui/AudioPlayer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -49,6 +49,7 @@ export default function MeetingPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const transcriptRef = useRef<TranscriptViewerHandle>(null);
 
   const job = useJobStatus(activeJobId);
 
@@ -88,6 +89,36 @@ export default function MeetingPage() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Keyboard shortcuts — only active when there is audio loaded
+  useEffect(() => {
+    if (!audioSrc) return;
+    const handler = (e: KeyboardEvent) => {
+      // Don't fire while the user is typing in any input
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const el = audioRef.current;
+      switch (e.key.toLowerCase()) {
+        case "a":
+          if (el) el.currentTime = Math.max(0, el.currentTime - 10);
+          break;
+        case "f":
+          if (el) el.currentTime = Math.min(el.duration || 0, el.currentTime + 10);
+          break;
+        case "s":
+          if (el) { el.paused ? el.play().catch(() => {}) : el.pause(); }
+          break;
+        case "d":
+          transcriptRef.current?.openNoteForActiveBlock();
+          break;
+        case "q":
+          transcriptRef.current?.editActiveSpeaker();
+          break;
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [audioSrc]);
 
   const loadMeeting = useCallback(async () => {
     try {
@@ -262,6 +293,7 @@ export default function MeetingPage() {
 
         {hasTranscript && (
           <TranscriptViewer
+            ref={transcriptRef}
             segments={segments}
             speakers={speakers}
             meetingId={id}
@@ -290,13 +322,34 @@ export default function MeetingPage() {
       </main>
 
       {hasTranscript && audioSrc && (
-        <AudioPlayer
-          src={audioSrc}
-          audioRef={audioRef}
-          onTimeUpdate={setCurrentTime}
-        />
+        <>
+          {/* Keyboard shortcut hint bar */}
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+            <div className="flex items-center gap-4 bg-gray-900/80 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full shadow-lg">
+              <Key k="A" label="← 10s" />
+              <Key k="S" label="play/pause" />
+              <Key k="D" label="+ note" />
+              <Key k="F" label="10s →" />
+              <Key k="Q" label="rename speaker" />
+            </div>
+          </div>
+          <AudioPlayer
+            src={audioSrc}
+            audioRef={audioRef}
+            onTimeUpdate={setCurrentTime}
+          />
+        </>
       )}
     </div>
+  );
+}
+
+function Key({ k, label }: { k: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <kbd className="bg-white/20 rounded px-1.5 py-0.5 font-mono font-bold text-xs">{k}</kbd>
+      <span className="text-white/70">{label}</span>
+    </span>
   );
 }
 
