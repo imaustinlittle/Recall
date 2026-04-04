@@ -29,6 +29,7 @@ export interface Meeting {
   description: string | null;
   tags: string[] | null;
   recorded_at: string | null;
+  summary: string | null;
   created_at: string;
   updated_at: string;
 }

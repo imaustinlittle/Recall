@@ -103,6 +103,22 @@ SETTINGS_SCHEMA: list[dict] = [
         "options": ["DEBUG", "INFO", "WARNING", "ERROR"],
         "restart_required": False,
     },
+    {
+        "key": "ollama_base_url",
+        "label": "Ollama URL",
+        "section": "Summarization",
+        "description": "Base URL of the Ollama API. Default: http://ollama:11434",
+        "type": "text",
+        "restart_required": False,
+    },
+    {
+        "key": "ollama_model",
+        "label": "Ollama Model",
+        "section": "Summarization",
+        "description": "Model to use for summarization, e.g. llama3.1:8b or mistral:7b.",
+        "type": "text",
+        "restart_required": False,
+    },
 ]
 
 # Keys that are sensitive — value is masked on read

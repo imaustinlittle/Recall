@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Upload
     max_upload_bytes: int = 2 * 1024 ** 3  # 2 GB
 
+    # Summarization (Ollama)
+    ollama_base_url: str = "http://ollama:11434"
+    ollama_model: str = "llama3.1:8b"
+
     # App
     environment: str = "development"
     log_level: str = "INFO"

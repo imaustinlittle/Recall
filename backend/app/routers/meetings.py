@@ -84,6 +84,29 @@ async def delete_meeting(
     await db.commit()
 
 
+@router.post("/{meeting_id}/summarize")
+async def trigger_summarize(
+    meeting_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Enqueue summarization for a meeting. Re-runnable after speaker renames."""
+    await _get_owned_meeting(db, meeting_id, current_user.id)
+
+    # Verify there's a transcript to summarize
+    result = await db.execute(
+        select(models.TranscriptSegment)
+        .where(models.TranscriptSegment.meeting_id == meeting_id)
+        .limit(1)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=422, detail="Meeting has no transcript to summarize")
+
+    from app.workers.tasks import summarize_meeting
+    summarize_meeting.delay(str(meeting_id))
+    return {"status": "queued"}
+
+
 # ── Helper ─────────────────────────────────────────────────────────────────
 async def _get_owned_meeting(
     db: AsyncSession, meeting_id: uuid.UUID, user_id: uuid.UUID

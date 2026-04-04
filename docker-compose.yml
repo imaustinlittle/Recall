@@ -23,6 +23,8 @@ x-backend-common: &backend-common
     MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2147483648}
     ENVIRONMENT: ${ENVIRONMENT:-production}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
   volumes:
     - media_files:/data/media
   depends_on:
@@ -95,6 +97,8 @@ services:
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2147483648}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
       CUDA_VISIBLE_DEVICES: "0"
     deploy:
       resources:
@@ -137,6 +141,25 @@ services:
       - "traefik.http.routers.recall-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
+  # ── Ollama (local LLM for summarization) ──────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: recall_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - internal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   # ── MinIO (optional S3-compatible storage) ─────────────────────────────────
   minio:
     image: minio/minio:latest
@@ -166,3 +189,4 @@ volumes:
   redis_data:
   media_files:
   minio_data:
+  ollama_data:

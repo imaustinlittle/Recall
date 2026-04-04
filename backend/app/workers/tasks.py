@@ -177,6 +177,9 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
                 f"segments={len(raw_segments)}  speakers={len(speaker_map)}"
             )
 
+            # Automatically kick off summarization
+            summarize_meeting.delay(meeting_id)
+
         except Exception as exc:
             logger.exception(f"[process_meeting] FAILED  meeting={meeting_id}")
             db.rollback()
@@ -199,3 +202,76 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
                 db2.commit()
 
             raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, name="summarize_meeting", max_retries=1, default_retry_delay=30)
+def summarize_meeting(self, meeting_id: str):
+    """
+    Summarize a meeting transcript using a local Ollama LLM.
+    Stores the result in meetings.summary.
+    """
+    logger.info(f"[summarize_meeting] start  meeting={meeting_id}")
+
+    try:
+        with get_sync_session() as db:
+            meeting = db.get(models.Meeting, uuid.UUID(meeting_id))
+            if not meeting:
+                logger.warning(f"[summarize_meeting] meeting {meeting_id} not found")
+                return
+
+            segments = (
+                db.query(models.TranscriptSegment)
+                .filter_by(meeting_id=uuid.UUID(meeting_id))
+                .order_by(models.TranscriptSegment.segment_index)
+                .all()
+            )
+            if not segments:
+                logger.warning(f"[summarize_meeting] no segments for meeting {meeting_id}")
+                return
+
+            speaker_map = {
+                sp.id: sp
+                for sp in db.query(models.Speaker)
+                .filter_by(meeting_id=uuid.UUID(meeting_id))
+                .all()
+            }
+
+            # Build speaker-labeled transcript
+            lines = []
+            for seg in segments:
+                sp = speaker_map.get(seg.speaker_id)
+                name = (sp.display_name or sp.label) if sp else "Unknown"
+                lines.append(f"[{name}]: {seg.content.strip()}")
+            transcript_text = "\n".join(lines)
+
+            prompt = (
+                "You are summarizing a recorded meeting transcript.\n\n"
+                f"TRANSCRIPT:\n{transcript_text}\n\n"
+                "Write a concise meeting summary with three sections:\n"
+                "1. **Overview** (2-3 sentences describing what the meeting was about)\n"
+                "2. **Key Decisions** (bullet list, or \"None identified\" if none)\n"
+                "3. **Action Items** (bullet list with owner if mentioned, or \"None identified\" if none)\n\n"
+                "Be concise and factual. Do not invent information not present in the transcript."
+            )
+
+            import httpx as _httpx
+            response = _httpx.post(
+                f"{settings.ollama_base_url}/api/generate",
+                json={
+                    "model": settings.ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                },
+                timeout=300.0,
+            )
+            response.raise_for_status()
+            summary = response.json()["response"].strip()
+
+            meeting.summary = summary
+            db.commit()
+
+        logger.info(f"[summarize_meeting] complete  meeting={meeting_id}")
+
+    except Exception as exc:
+        logger.exception(f"[summarize_meeting] FAILED  meeting={meeting_id}")
+        raise self.retry(exc=exc)

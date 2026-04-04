@@ -89,6 +89,7 @@ class MeetingOut(BaseModel):
     description: Optional[str]
     tags: Optional[list]
     recorded_at: Optional[datetime]
+    summary: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

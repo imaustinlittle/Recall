@@ -22,6 +22,7 @@ import { AudioPlayer } from "@/components/ui/AudioPlayer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { NotesPanel } from "@/components/notes/NotesPanel";
+import { SummaryPanel, SummaryPending } from "@/components/summary/SummaryPanel";
 import { formatDate } from "@/lib/utils";
 
 const EXPORT_FORMATS = [
@@ -79,6 +80,19 @@ export default function MeetingPage() {
       }
     }
   }, [user, id]);
+
+  // Poll for summary while transcript is ready but summary not yet generated
+  useEffect(() => {
+    if (!meeting || meeting.summary || meeting.status !== "transcribed") return;
+    const interval = setInterval(async () => {
+      const updated = await meetingsApi.get(id) as Meeting;
+      if (updated.summary) {
+        setMeeting(updated);
+        clearInterval(interval);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [meeting?.summary, meeting?.status]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -276,7 +290,7 @@ export default function MeetingPage() {
         )}
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-4xl mx-auto px-6 py-8 pb-40 space-y-6">
         {(isProcessing || job) && <JobProgressBar job={job} />}
 
         {!hasTranscript && !isProcessing && (
@@ -309,6 +323,20 @@ export default function MeetingPage() {
           <div className="text-center py-16 text-gray-400 text-sm">
             Processing your recording…
           </div>
+        )}
+
+        {/* Summary */}
+        {hasTranscript && meeting.summary && (
+          <SummaryPanel
+            summary={meeting.summary}
+            onRegenerate={async () => {
+              await meetingsApi.summarize(id);
+              setMeeting((m) => m ? { ...m, summary: null } : m);
+            }}
+          />
+        )}
+        {hasTranscript && !meeting.summary && meeting.status === "transcribed" && (
+          <SummaryPending />
         )}
 
         <NotesPanel

@@ -94,6 +94,9 @@ export const meetings = {
     request(`/meetings/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
   delete: (id: string) => request(`/meetings/${id}`, { method: "DELETE" }),
+
+  summarize: (id: string) =>
+    request(`/meetings/${id}/summarize`, { method: "POST" }),
 };
 
 // ── Media ──────────────────────────────────────────────────────────────────
