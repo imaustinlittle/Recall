@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { notes as notesApi } from "@/lib/api";
 import { Note, NoteType } from "@/lib/types";
 
 // ── Type config ────────────────────────────────────────────────────────────
@@ -21,8 +20,6 @@ const FILTER_TABS: { key: NoteType | "all"; label: string }[] = [
   { key: "general",     label: "Notes"        },
 ];
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
 function fmtTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -31,7 +28,7 @@ function fmtTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────
+// ── NoteCard ───────────────────────────────────────────────────────────────
 
 function NoteCard({
   note,
@@ -92,10 +89,7 @@ function NoteCard({
           >
             {saving ? "Saving…" : "Save"}
           </button>
-          <button
-            onClick={handleCancel}
-            className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={handleCancel} className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700">
             Cancel
           </button>
         </div>
@@ -105,19 +99,19 @@ function NoteCard({
 
   return (
     <div className={`group rounded-lg border border-transparent hover:border-gray-200 p-3 space-y-1.5 ${cfg.bg} transition-colors`}>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs">{cfg.icon}</span>
         <span className={`text-xs font-medium ${cfg.color}`}>{cfg.label}</span>
-        {note.timestamp_ref != null && onSeek && (
+        {note.timestamp_ref != null && (
           <button
-            onClick={() => onSeek(note.timestamp_ref!)}
-            className="ml-auto text-xs text-gray-400 hover:text-brand-500 font-mono"
+            onClick={() => onSeek?.(note.timestamp_ref!)}
+            className="font-mono text-xs text-gray-400 hover:text-brand-500 transition-colors"
             title="Jump to this timestamp"
           >
-            {fmtTime(note.timestamp_ref)}
+            @ {fmtTime(note.timestamp_ref)}
           </button>
         )}
-        <div className={`${note.timestamp_ref != null ? "" : "ml-auto"} flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+        <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => setEditing(true)}
             className="text-gray-400 hover:text-gray-600 text-xs px-1"
@@ -127,16 +121,10 @@ function NoteCard({
           </button>
           {confirming ? (
             <>
-              <button
-                onClick={() => onDelete(note.id)}
-                className="text-red-500 hover:text-red-700 text-xs px-1"
-              >
+              <button onClick={() => onDelete(note.id)} className="text-red-500 hover:text-red-700 text-xs px-1">
                 Confirm
               </button>
-              <button
-                onClick={() => setConfirming(false)}
-                className="text-gray-400 hover:text-gray-600 text-xs px-1"
-              >
+              <button onClick={() => setConfirming(false)} className="text-gray-400 hover:text-gray-600 text-xs px-1">
                 ✕
               </button>
             </>
@@ -155,6 +143,8 @@ function NoteCard({
     </div>
   );
 }
+
+// ── AddNoteForm ────────────────────────────────────────────────────────────
 
 function AddNoteForm({
   onAdd,
@@ -187,14 +177,8 @@ function AddNoteForm({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      handleAdd();
-    }
-    if (e.key === "Escape") {
-      setOpen(false);
-      setBody("");
-      setTimestampRef(null);
-    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAdd();
+    if (e.key === "Escape") { setOpen(false); setBody(""); setTimestampRef(null); }
   };
 
   if (!open) {
@@ -262,55 +246,38 @@ function AddNoteForm({
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
+// ── Main export ────────────────────────────────────────────────────────────
 
 export function NotesPanel({
-  meetingId,
-  initialNotes,
+  notes,
   currentTime,
   onSeek,
+  onAdd,
+  onUpdate,
+  onDelete,
 }: {
-  meetingId: string;
-  initialNotes: Note[];
+  notes: Note[];
   currentTime?: number;
   onSeek?: (t: number) => void;
+  onAdd: (body: string, type: NoteType, timestampRef: number | null) => Promise<void>;
+  onUpdate: (id: string, body: string, type: NoteType) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }) {
-  const [notesList, setNotesList] = useState<Note[]>(initialNotes);
   const [filter, setFilter] = useState<NoteType | "all">("all");
 
-  const handleAdd = async (body: string, type: NoteType, timestampRef: number | null) => {
-    const created = (await notesApi.create(meetingId, {
-      note_type: type,
-      body,
-      timestamp_ref: timestampRef,
-    })) as Note;
-    setNotesList((prev) => [...prev, created]);
-  };
-
-  const handleUpdate = async (id: string, body: string, type: NoteType) => {
-    const updated = (await notesApi.update(meetingId, id, { body, note_type: type })) as Note;
-    setNotesList((prev) => prev.map((n) => (n.id === id ? updated : n)));
-  };
-
-  const handleDelete = async (id: string) => {
-    await notesApi.delete(meetingId, id);
-    setNotesList((prev) => prev.filter((n) => n.id !== id));
-  };
-
-  const filtered = filter === "all" ? notesList : notesList.filter((n) => n.note_type === filter);
-
+  const filtered = filter === "all" ? notes : notes.filter((n) => n.note_type === filter);
   const countFor = (key: NoteType | "all") =>
-    key === "all" ? notesList.length : notesList.filter((n) => n.note_type === key).length;
+    key === "all" ? notes.length : notes.filter((n) => n.note_type === key).length;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900">Notes</h2>
-        <span className="text-xs text-gray-400">{notesList.length} total</span>
+        <span className="text-xs text-gray-400">{notes.length} total</span>
       </div>
 
       {/* Filter tabs */}
-      {notesList.length > 0 && (
+      {notes.length > 0 && (
         <div className="flex gap-0.5 px-3 pt-2 overflow-x-auto">
           {FILTER_TABS.map((tab) => {
             const count = countFor(tab.key);
@@ -326,30 +293,29 @@ export function NotesPanel({
                 }`}
               >
                 {tab.label}
-                {count > 0 && (
-                  <span className="ml-1 text-gray-400">{count}</span>
-                )}
+                {count > 0 && <span className="ml-1 text-gray-400">{count}</span>}
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Notes list */}
       <div className="p-3 space-y-2">
         {filtered.length === 0 && filter !== "all" && (
-          <p className="text-xs text-gray-400 text-center py-2">No {filter.replace("_", " ")}s yet.</p>
+          <p className="text-xs text-gray-400 text-center py-2">
+            No {filter.replace("_", " ")}s yet.
+          </p>
         )}
         {filtered.map((note) => (
           <NoteCard
             key={note.id}
             note={note}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
             onSeek={onSeek}
           />
         ))}
-        <AddNoteForm onAdd={handleAdd} currentTime={currentTime} />
+        <AddNoteForm onAdd={onAdd} currentTime={currentTime} />
       </div>
     </div>
   );

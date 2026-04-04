@@ -2,8 +2,16 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi, media as mediaApi, notes as notesApi, exportTranscript } from "@/lib/api";
-import { Meeting, TranscriptSegment, Speaker, Job, Note } from "@/lib/types";
+import {
+  meetings as meetingsApi,
+  transcript as transcriptApi,
+  speakers as speakersApi,
+  jobs as jobsApi,
+  media as mediaApi,
+  notes as notesApi,
+  exportTranscript,
+} from "@/lib/api";
+import { Meeting, TranscriptSegment, Speaker, Job, Note, NoteType } from "@/lib/types";
 import { useJobStatus } from "@/lib/useJobStatus";
 import { useAuth } from "@/lib/useAuth";
 import { DropZone } from "@/components/upload/DropZone";
@@ -35,20 +43,15 @@ export default function MeetingPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeJobId, setActiveJobId] = useState<string | null>(
-    searchParams.get("job")
-  );
-  const [jobsLoaded, setJobsLoaded] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(searchParams.get("job"));
   const [currentTime, setCurrentTime] = useState(0);
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
-  // Watch job progress via WS/polling
   const job = useJobStatus(activeJobId);
 
-  // Reload transcript when job completes
   useEffect(() => {
     if (job?.status === "completed") {
       setActiveJobId(null);
@@ -65,21 +68,17 @@ export default function MeetingPage() {
     if (user) {
       loadMeeting();
       loadTranscript();
-      // Reconnect to any active job if we navigated back without a ?job= param
       if (!searchParams.get("job")) {
         jobsApi.list(id).then((list: any) => {
           const active = list?.find((j: any) =>
             j.status === "processing" || j.status === "queued"
           );
           if (active) setActiveJobId(active.id);
-        }).finally(() => setJobsLoaded(true));
-      } else {
-        setJobsLoaded(true);
+        });
       }
     }
   }, [user, id]);
 
-  // Close export menu when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
@@ -112,27 +111,58 @@ export default function MeetingPage() {
       setNotesList(fetchedNotes);
       if (mediaFiles.length > 0) {
         const fp = mediaFiles[0].file_path;
-        const publicUrl = fp.replace(/^\/data/, "");
-        setAudioSrc(publicUrl);
+        setAudioSrc(fp.replace(/^\/data/, ""));
       }
     } finally {
       setLoading(false);
     }
   }, [id]);
 
+  // ── Note CRUD (lifted so both TranscriptViewer and NotesPanel share state) ──
+
+  const handleAddNote = useCallback(async (
+    body: string,
+    type: NoteType,
+    timestampRef: number | null
+  ) => {
+    const created = (await notesApi.create(id, {
+      note_type: type,
+      body,
+      timestamp_ref: timestampRef,
+    })) as Note;
+    setNotesList((prev) => [...prev, created]);
+  }, [id]);
+
+  const handleUpdateNote = useCallback(async (noteId: string, body: string, type: NoteType) => {
+    const updated = (await notesApi.update(id, noteId, { body, note_type: type })) as Note;
+    setNotesList((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
+  }, [id]);
+
+  const handleDeleteNote = useCallback(async (noteId: string) => {
+    await notesApi.delete(id, noteId);
+    setNotesList((prev) => prev.filter((n) => n.id !== noteId));
+  }, [id]);
+
+  // ── Called from TranscriptViewer's inline note form ──────────────────────
+
+  const handleAddNoteFromTranscript = useCallback(async (
+    timestamp: number,
+    body: string,
+    type: NoteType
+  ) => {
+    await handleAddNote(body, type, timestamp);
+  }, [handleAddNote]);
+
+  // ── Transcript handlers ──────────────────────────────────────────────────
+
   const handleUploaded = (newJob: Job) => {
     setActiveJobId(newJob.id);
     setMeeting((m) => m ? { ...m, status: "queued" } : m);
   };
 
-  const handleSegmentUpdate = async (
-    segmentId: string,
-    content: string
-  ) => {
+  const handleSegmentUpdate = async (segmentId: string, content: string) => {
     const updated = (await transcriptApi.update(id, segmentId, { content })) as TranscriptSegment;
-    setSegments((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s))
-    );
+    setSegments((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
   };
 
   const handleSpeakerRename = async (speakerId: string, display_name: string) => {
@@ -147,6 +177,13 @@ export default function MeetingPage() {
     );
   };
 
+  const seek = (t: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = t;
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
   if (authLoading || !user || !meeting) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -154,13 +191,6 @@ export default function MeetingPage() {
       </div>
     );
   }
-
-  const seek = (t: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = t;
-      audioRef.current.play().catch(() => {});
-    }
-  };
 
   const isProcessing = ["queued", "processing"].includes(meeting.status);
   const hasTranscript = segments.length > 0;
@@ -187,7 +217,6 @@ export default function MeetingPage() {
         </div>
         <StatusBadge status={meeting.status} />
 
-        {/* Export dropdown — only shown when there's a transcript */}
         {hasTranscript && (
           <div className="relative" ref={exportMenuRef}>
             <button
@@ -204,10 +233,7 @@ export default function MeetingPage() {
                 {EXPORT_FORMATS.map(({ key, label }) => (
                   <button
                     key={key}
-                    onClick={() => {
-                      exportTranscript(id, key);
-                      setExportOpen(false);
-                    }}
+                    onClick={() => { exportTranscript(id, key); setExportOpen(false); }}
                     className="w-full text-left text-sm px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     {label}
@@ -220,27 +246,20 @@ export default function MeetingPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Job progress bar */}
-        {(isProcessing || job) && (
-          <JobProgressBar job={job} />
-        )}
+        {(isProcessing || job) && <JobProgressBar job={job} />}
 
-        {/* Capture options — shown when no transcript and not already processing */}
         {!hasTranscript && !isProcessing && (
           <div className="space-y-3">
             <RecordingPanel meetingId={id} onUploaded={handleUploaded} />
-
             <div className="flex items-center gap-3 text-xs text-gray-400">
               <div className="flex-1 border-t border-gray-200" />
               <span>or upload an existing file</span>
               <div className="flex-1 border-t border-gray-200" />
             </div>
-
             <DropZone meetingId={id} onUploaded={handleUploaded} />
           </div>
         )}
 
-        {/* Transcript */}
         {hasTranscript && (
           <TranscriptViewer
             segments={segments}
@@ -250,26 +269,26 @@ export default function MeetingPage() {
             onSeek={seek}
             onSegmentUpdate={handleSegmentUpdate}
             onSpeakerRename={handleSpeakerRename}
+            onAddNote={handleAddNoteFromTranscript}
           />
         )}
 
-        {/* Empty state while processing */}
         {isProcessing && !job && (
           <div className="text-center py-16 text-gray-400 text-sm">
             Processing your recording…
           </div>
         )}
 
-        {/* Notes — always visible once meeting loads */}
         <NotesPanel
-          meetingId={id}
-          initialNotes={notesList}
+          notes={notesList}
           currentTime={currentTime}
           onSeek={audioSrc ? seek : undefined}
+          onAdd={handleAddNote}
+          onUpdate={handleUpdateNote}
+          onDelete={handleDeleteNote}
         />
       </main>
 
-      {/* Sticky audio player — shown once transcript is ready */}
       {hasTranscript && audioSrc && (
         <AudioPlayer
           src={audioSrc}
@@ -281,13 +300,7 @@ export default function MeetingPage() {
   );
 }
 
-function EditableTitle({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (v: string) => void;
-}) {
+function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
