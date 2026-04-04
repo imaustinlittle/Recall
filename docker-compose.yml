@@ -79,6 +79,22 @@ services:
         --concurrency=2
         --queues=transcription,default
     environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_SYNC_URL: ${DATABASE_SYNC_URL}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      MEDIA_ROOT: ${MEDIA_ROOT:-/data/media}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      USE_DIARIZATION: ${USE_DIARIZATION:-false}
+      HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2147483648}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       CUDA_VISIBLE_DEVICES: "0"
     deploy:
       resources:
