@@ -136,6 +136,72 @@ function InlineNoteForm({
   );
 }
 
+// ── Edit area (auto-sized, cursor at top, blur-to-cancel) ─────────────────────
+
+function EditArea({
+  draft,
+  saving,
+  onDraftChange,
+  onSave,
+  onCancel,
+}: {
+  draft: string;
+  saving: boolean;
+  onDraftChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // On mount: auto-size to content height and move cursor to the start
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+    el.setSelectionRange(0, 0);
+    el.scrollTop = 0;
+  }, []);
+
+  // Resize whenever draft changes
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
+  return (
+    <div className="space-y-2" onMouseDown={(e) => e.stopPropagation()}>
+      <textarea
+        ref={ref}
+        autoFocus
+        value={draft}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancel();
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSave();
+        }}
+        className="w-full text-sm text-gray-800 border border-brand-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none overflow-hidden"
+        style={{ minHeight: "4rem" }}
+      />
+      <div className="flex gap-2 items-center">
+        <button
+          onClick={onSave}
+          disabled={saving}
+          className="text-xs bg-brand-600 text-white px-3 py-1 rounded-lg hover:bg-brand-700 disabled:opacity-60"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button onClick={onCancel} className="text-xs text-gray-500 px-3 py-1 rounded-lg hover:bg-gray-100">
+          Cancel
+        </button>
+        <span className="text-xs text-gray-300 ml-1">Ctrl+Enter to save, Esc to cancel</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Single speech block ────────────────────────────────────────────────────────
 
 function SpeechBlock({
@@ -234,30 +300,13 @@ function SpeechBlock({
 
       {/* Paragraph text — editing state per segment */}
       {editingSeg ? (
-        <div className="space-y-2">
-          <textarea
-            autoFocus
-            value={editDraft}
-            onChange={(e) => onDraftChange(e.target.value)}
-            rows={3}
-            className="w-full text-sm text-gray-800 border border-brand-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => onSaveEdit(editingSeg.id)}
-              disabled={saving}
-              className="text-xs bg-brand-600 text-white px-3 py-1 rounded-lg hover:bg-brand-700 disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button
-              onClick={onCancelEdit}
-              className="text-xs text-gray-500 px-3 py-1 rounded-lg hover:bg-gray-100"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <EditArea
+          draft={editDraft}
+          saving={saving}
+          onDraftChange={onDraftChange}
+          onSave={() => onSaveEdit(editingSeg.id)}
+          onCancel={onCancelEdit}
+        />
       ) : (
         <p
           onClick={() => onStartEdit(block.segments[block.segments.length - 1])}
@@ -386,11 +435,21 @@ export function TranscriptViewer({
 
   const activeSegment = segments.findLast((s) => s.start_time <= currentTime);
   const activeRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // startEdit uses combined block text so the textarea shows the full paragraph
   const startEdit = (seg: TranscriptSegment) => {
+    // Find which block this segment belongs to and use combined text
+    const block = buildBlocks(segments).find((b) => b.segments.some((s) => s.id === seg.id));
+    const combinedText = block
+      ? block.segments.map((s) => s.content.trim()).filter(Boolean).join(" ")
+      : seg.content;
     setEditingId(seg.id);
-    setDraft(seg.content);
+    setDraft(combinedText);
   };
+
+  const blocks = buildBlocks(segments);
+  const activeBlock = blocks.find((b) => b.segments.some((s) => s.id === activeSegment?.id));
   const cancelEdit = () => { setEditingId(null); setDraft(""); };
   const saveEdit = async (segmentId: string) => {
     setSaving(true);
@@ -402,11 +461,24 @@ export function TranscriptViewer({
     }
   };
 
+  // Click outside the transcript container cancels edit
+  useEffect(() => {
+    if (!editingId) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        cancelEdit();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [editingId]);
+
+  // Scroll only when the active BLOCK changes, not every segment within a block
   useEffect(() => {
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [activeSegment?.id]);
+  }, [activeBlock?.key]);
 
-  const blocks = buildBlocks(segments);
+
 
   // Build render items: single blocks or overlap pairs
   type RenderItem =
@@ -441,7 +513,7 @@ export function TranscriptViewer({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+    <div ref={containerRef} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
       {/* Speaker legend */}
       {speakers.length > 0 && (
         <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap gap-3">
