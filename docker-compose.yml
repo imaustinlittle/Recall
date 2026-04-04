@@ -6,7 +6,6 @@ x-backend-common: &backend-common
     dockerfile: Dockerfile
     args:
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
-  env_file: .env
   volumes:
     - media_files:/data/media
   depends_on:
