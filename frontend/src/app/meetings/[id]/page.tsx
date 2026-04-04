@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi } from "@/lib/api";
 import { Meeting, TranscriptSegment, Speaker, Job } from "@/lib/types";
@@ -10,6 +10,7 @@ import { DropZone } from "@/components/upload/DropZone";
 import { RecordingPanel } from "@/components/recording/RecordingPanel";
 import { TranscriptViewer } from "@/components/transcript/TranscriptViewer";
 import { JobProgressBar } from "@/components/ui/JobProgressBar";
+import { AudioPlayer } from "@/components/ui/AudioPlayer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { formatDate } from "@/lib/utils";
@@ -28,6 +29,8 @@ export default function MeetingPage() {
     searchParams.get("job")
   );
   const [jobsLoaded, setJobsLoaded] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // Watch job progress via WS/polling
   const job = useJobStatus(activeJobId);
@@ -120,6 +123,13 @@ export default function MeetingPage() {
     );
   }
 
+  const seek = (t: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = t;
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
   const mediaUrl = `/media/${id}`;
   const isProcessing = ["queued", "processing"].includes(meeting.status);
   const hasTranscript = segments.length > 0;
@@ -174,6 +184,8 @@ export default function MeetingPage() {
             segments={segments}
             speakers={speakers}
             meetingId={id}
+            currentTime={currentTime}
+            onSeek={seek}
             onSegmentUpdate={handleSegmentUpdate}
             onSpeakerRename={handleSpeakerRename}
           />
@@ -186,6 +198,15 @@ export default function MeetingPage() {
           </div>
         )}
       </main>
+
+      {/* Sticky audio player — shown once transcript is ready */}
+      {hasTranscript && (
+        <AudioPlayer
+          src={`${mediaUrl}/`}
+          audioRef={audioRef}
+          onTimeUpdate={setCurrentTime}
+        />
+      )}
     </div>
   );
 }

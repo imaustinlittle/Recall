@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { TranscriptSegment, Speaker } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
 
@@ -8,6 +8,8 @@ interface Props {
   segments: TranscriptSegment[];
   speakers: Speaker[];
   meetingId: string;
+  currentTime: number;
+  onSeek: (t: number) => void;
   onSegmentUpdate: (segmentId: string, content: string) => Promise<void>;
   onSpeakerRename: (speakerId: string, name: string) => Promise<void>;
 }
@@ -15,35 +17,23 @@ interface Props {
 export function TranscriptViewer({
   segments,
   speakers,
-  meetingId,
+  currentTime,
+  onSeek,
   onSegmentUpdate,
   onSpeakerRename,
 }: Props) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [currentTime, setCurrentTime] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [draft, setDraft]         = useState("");
+  const [saving, setSaving]       = useState(false);
 
-  // Determine which segment is active during playback
   const activeSegment = segments.findLast((s) => s.start_time <= currentTime);
-
-  const seek = useCallback((time: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      audioRef.current.play().catch(() => {});
-    }
-  }, []);
 
   const startEdit = (seg: TranscriptSegment) => {
     setEditingId(seg.id);
     setDraft(seg.content);
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setDraft("");
-  };
+  const cancelEdit = () => { setEditingId(null); setDraft(""); };
 
   const saveEdit = async (segmentId: string) => {
     setSaving(true);
@@ -61,24 +51,8 @@ export function TranscriptViewer({
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeSegment?.id]);
 
-  const mediaUrl = `/media/${meetingId}`;
-
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-      {/* Audio player */}
-      <div className="border-b border-gray-100 px-6 py-4 bg-gray-50">
-        <audio
-          ref={audioRef}
-          controls
-          className="w-full h-10"
-          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-          preload="metadata"
-        >
-          <source src={`${mediaUrl}/`} />
-          Your browser does not support audio playback.
-        </audio>
-      </div>
-
       {/* Speaker legend */}
       {speakers.length > 0 && (
         <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap gap-3">
@@ -93,11 +67,11 @@ export function TranscriptViewer({
       )}
 
       {/* Segments */}
-      <div className="divide-y divide-gray-50 max-h-[60vh] overflow-y-auto scrollbar-thin">
+      <div className="divide-y divide-gray-50">
         {segments.map((seg) => {
-          const isActive = seg.id === activeSegment?.id;
+          const isActive  = seg.id === activeSegment?.id;
           const isEditing = seg.id === editingId;
-          const speakerName = seg.speaker?.display_name || seg.speaker?.label || "Unknown";
+          const speakerName  = seg.speaker?.display_name || seg.speaker?.label || "Unknown";
           const speakerColor = seg.speaker?.color_hex ?? "#94a3b8";
 
           return (
@@ -110,7 +84,7 @@ export function TranscriptViewer({
             >
               {/* Timestamp — click to seek */}
               <button
-                onClick={() => seek(seg.start_time)}
+                onClick={() => onSeek(seg.start_time)}
                 className="shrink-0 font-mono text-xs text-gray-400 hover:text-brand-600 pt-0.5 transition-colors w-12 text-left"
                 title={`Jump to ${formatTime(seg.start_time)}`}
               >
@@ -176,15 +150,9 @@ export function TranscriptViewer({
   );
 }
 
-function SpeakerChip({
-  speaker,
-  onRename,
-}: {
-  speaker: Speaker;
-  onRename: (name: string) => Promise<void>;
-}) {
+function SpeakerChip({ speaker, onRename }: { speaker: Speaker; onRename: (name: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(speaker.display_name || speaker.label);
+  const [draft, setDraft]     = useState(speaker.display_name || speaker.label);
 
   const save = async () => {
     setEditing(false);
@@ -212,10 +180,7 @@ function SpeakerChip({
       className="inline-flex items-center gap-1.5 text-xs rounded-full px-3 py-1 border border-gray-200 hover:border-gray-300 transition-colors"
       title="Click to rename speaker"
     >
-      <span
-        className="w-2 h-2 rounded-full shrink-0"
-        style={{ backgroundColor: speaker.color_hex }}
-      />
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: speaker.color_hex }} />
       {speaker.display_name || speaker.label}
     </button>
   );
