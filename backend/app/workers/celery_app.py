@@ -69,6 +69,14 @@ def apply_db_settings(**kwargs):
                     coerced = row.value
                 setattr(settings, row.key, coerced)
                 logger.info(f"[worker config] DB override: {row.key} = {coerced}")
+
+        # Clear the cached Whisper model if compute settings changed
+        if row.key in ("whisper_model", "whisper_device", "whisper_compute_type"):
+            try:
+                from app.services.transcription import _get_model
+                _get_model.cache_clear()
+            except Exception:
+                pass
     except Exception:
         logger.warning("[worker config] Could not load DB settings — using env defaults")
 

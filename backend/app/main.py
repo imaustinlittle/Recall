@@ -15,7 +15,7 @@ from app.database import AsyncSessionLocal
 from app import models
 from app.limiter import limiter
 from app.routers import auth, meetings, upload, transcript, speakers, jobs
-from app.routers import admin
+from app.routers import admin, notes, export
 
 logging.basicConfig(
     level=settings.log_level,
@@ -111,6 +111,8 @@ app.include_router(transcript.router, prefix="/api",          tags=["transcript"
 app.include_router(speakers.router,   prefix="/api",          tags=["speakers"])
 app.include_router(jobs.router,       prefix="/api",          tags=["jobs"])
 app.include_router(admin.router,      prefix="/api/admin",    tags=["admin"])
+app.include_router(notes.router,      prefix="/api",          tags=["notes"])
+app.include_router(export.router,     prefix="/api",          tags=["export"])
 
 
 @app.get("/api/health", tags=["health"])

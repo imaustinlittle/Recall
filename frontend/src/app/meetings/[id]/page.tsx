@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi, media as mediaApi } from "@/lib/api";
-import { Meeting, TranscriptSegment, Speaker, Job } from "@/lib/types";
+import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi, media as mediaApi, notes as notesApi, exportTranscript } from "@/lib/api";
+import { Meeting, TranscriptSegment, Speaker, Job, Note } from "@/lib/types";
 import { useJobStatus } from "@/lib/useJobStatus";
 import { useAuth } from "@/lib/useAuth";
 import { DropZone } from "@/components/upload/DropZone";
@@ -13,7 +13,16 @@ import { JobProgressBar } from "@/components/ui/JobProgressBar";
 import { AudioPlayer } from "@/components/ui/AudioPlayer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
+import { NotesPanel } from "@/components/notes/NotesPanel";
 import { formatDate } from "@/lib/utils";
+
+const EXPORT_FORMATS = [
+  { key: "txt", label: "Plain Text (.txt)" },
+  { key: "md",  label: "Markdown (.md)"   },
+  { key: "srt", label: "Subtitles (.srt)" },
+  { key: "vtt", label: "WebVTT (.vtt)"    },
+  { key: "pdf", label: "PDF (.pdf)"       },
+] as const;
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +33,7 @@ export default function MeetingPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeJobId, setActiveJobId] = useState<string | null>(
     searchParams.get("job")
@@ -31,7 +41,9 @@ export default function MeetingPage() {
   const [jobsLoaded, setJobsLoaded] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Watch job progress via WS/polling
   const job = useJobStatus(activeJobId);
@@ -67,6 +79,17 @@ export default function MeetingPage() {
     }
   }, [user, id]);
 
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const loadMeeting = useCallback(async () => {
     try {
       const m = (await meetingsApi.get(id)) as Meeting;
@@ -78,16 +101,15 @@ export default function MeetingPage() {
 
   const loadTranscript = useCallback(async () => {
     try {
-      const [segs, spks, mediaFiles] = await Promise.all([
+      const [segs, spks, mediaFiles, fetchedNotes] = await Promise.all([
         transcriptApi.get(id) as Promise<TranscriptSegment[]>,
         speakersApi.list(id) as Promise<Speaker[]>,
         mediaApi.list(id),
+        notesApi.list(id) as Promise<Note[]>,
       ]);
       setSegments(segs);
       setSpeakers(spks);
-      // Derive the public URL from the server file_path
-      // file_path is like /data/media/{meeting_id}/{file_id}.mp3
-      // public URL is         /media/{meeting_id}/{file_id}.mp3
+      setNotesList(fetchedNotes);
       if (mediaFiles.length > 0) {
         const fp = mediaFiles[0].file_path;
         const publicUrl = fp.replace(/^\/data/, "");
@@ -164,6 +186,37 @@ export default function MeetingPage() {
           <p className="text-xs text-gray-400 mt-0.5">{formatDate(meeting.created_at)}</p>
         </div>
         <StatusBadge status={meeting.status} />
+
+        {/* Export dropdown — only shown when there's a transcript */}
+        {hasTranscript && (
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              onClick={() => setExportOpen((o) => !o)}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              Export
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+                {EXPORT_FORMATS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      exportTranscript(id, key);
+                      setExportOpen(false);
+                    }}
+                    className="w-full text-left text-sm px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
@@ -206,6 +259,14 @@ export default function MeetingPage() {
             Processing your recording…
           </div>
         )}
+
+        {/* Notes — always visible once meeting loads */}
+        <NotesPanel
+          meetingId={id}
+          initialNotes={notesList}
+          currentTime={currentTime}
+          onSeek={audioSrc ? seek : undefined}
+        />
       </main>
 
       {/* Sticky audio player — shown once transcript is ready */}

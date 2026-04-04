@@ -65,6 +65,22 @@ export interface TranscriptSegment {
   edited_at: string | null;
 }
 
+// ── Notes ──────────────────────────────────────────────────────────────────
+export type NoteType = "general" | "action_item" | "decision" | "question";
+
+export interface Note {
+  id: string;
+  meeting_id: string;
+  user_id: string;
+  note_type: NoteType;
+  body: string;
+  timestamp_ref: number | null;
+  is_action_item: boolean;
+  is_decision: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Jobs ───────────────────────────────────────────────────────────────────
 export type JobStatus =
   | "queued"

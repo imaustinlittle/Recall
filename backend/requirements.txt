@@ -32,6 +32,7 @@ httpx==0.28.1
 aiofiles==24.1.0
 python-magic==0.4.27
 slowapi==0.1.9
+fpdf2==2.8.3
 
 # ── Diarization (speaker identification) ───────────────────────────────────
 # Requires accepting the model license at:

@@ -186,6 +186,59 @@ export const speakers = {
     }),
 };
 
+// ── Notes ──────────────────────────────────────────────────────────────────
+export const notes = {
+  list: (meetingId: string) =>
+    request(`/meetings/${meetingId}/notes`),
+
+  create: (meetingId: string, body: { note_type?: string; body: string; timestamp_ref?: number | null }) =>
+    request(`/meetings/${meetingId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  update: (meetingId: string, noteId: string, body: { note_type?: string; body?: string; timestamp_ref?: number | null }) =>
+    request(`/meetings/${meetingId}/notes/${noteId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  delete: (meetingId: string, noteId: string) =>
+    request(`/meetings/${meetingId}/notes/${noteId}`, { method: "DELETE" }),
+};
+
+// ── Export ─────────────────────────────────────────────────────────────────
+export function exportTranscript(
+  meetingId: string,
+  format: "txt" | "md" | "srt" | "vtt" | "pdf"
+): void {
+  // Trigger a browser download by navigating to the endpoint
+  const url = `${BASE}/meetings/${meetingId}/export?format=${format}`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  // Include credentials via fetch, then create object URL
+  fetch(url, { credentials: "include" })
+    .then((res) => {
+      if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const filenameMatch = disposition.match(/filename="([^"]+)"/);
+      const filename = filenameMatch?.[1] ?? `transcript.${format}`;
+      return res.blob().then((blob) => ({ blob, filename }));
+    })
+    .then(({ blob, filename }) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    })
+    .catch((err) => console.error("Export error:", err));
+}
+
 // ── Admin ──────────────────────────────────────────────────────────────────
 export const adminApi = {
   getSettings: () => request("/admin/settings"),
