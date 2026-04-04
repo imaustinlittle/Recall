@@ -187,7 +187,7 @@ async def get_settings(
 
         result.append({
             **entry,
-            "current_value": str(display_value) if display_value is not None else "",
+            "current_value": str(display_value).lower() if isinstance(display_value, bool) else (str(display_value) if display_value is not None else ""),
             "has_db_override": key in db_overrides,
             "db_value": (
                 "••••••••"
