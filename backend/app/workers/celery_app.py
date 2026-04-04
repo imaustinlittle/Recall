@@ -35,13 +35,42 @@ celery_app.conf.update(
         "app.workers.tasks.process_meeting": {"queue": "transcription"},
     },
 
-    # Timeouts — transcription of a 2-hour meeting can take a while on CPU
-    task_soft_time_limit=3600,     # raises SoftTimeLimitExceeded at 60 min
-    task_time_limit=4200,          # hard kill at 70 min
+    # Timeouts — large files with diarization can take several hours
+    task_soft_time_limit=21600,    # soft limit: 6 hours
+    task_time_limit=25200,         # hard kill: 7 hours
 
     # Result expiry
     result_expires=86400,          # keep results for 24 h
 )
+
+
+@worker_ready.connect
+def apply_db_settings(**kwargs):
+    """
+    Load DB-stored settings overrides on worker startup, same as FastAPI does.
+    This ensures USE_DIARIZATION, WHISPER_COMPUTE_TYPE, etc. set via the
+    admin UI are respected by the worker without needing a full redeploy.
+    """
+    from app.database import get_sync_session
+    from app import models
+
+    try:
+        with get_sync_session() as db:
+            rows = db.query(models.AppSetting).all()
+            for row in rows:
+                if not hasattr(settings, row.key):
+                    continue
+                current = getattr(settings, row.key)
+                if isinstance(current, bool):
+                    coerced = row.value.lower() in ("true", "1", "yes")
+                elif isinstance(current, int):
+                    coerced = int(row.value)
+                else:
+                    coerced = row.value
+                setattr(settings, row.key, coerced)
+                logger.info(f"[worker config] DB override: {row.key} = {coerced}")
+    except Exception:
+        logger.warning("[worker config] Could not load DB settings — using env defaults")
 
 
 @worker_ready.connect
