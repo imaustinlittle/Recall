@@ -13,9 +13,28 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+# Pre-built ENUM references — create_type=False means SQLAlchemy will never
+# emit CREATE TYPE for these; the DO $$ blocks below handle creation safely.
+_meeting_status = postgresql.ENUM(
+    "pending", "uploading", "queued", "processing", "transcribed", "failed",
+    name="meetingstatus", create_type=False,
+)
+_job_status = postgresql.ENUM(
+    "queued", "processing", "completed", "failed", "cancelled",
+    name="jobstatus", create_type=False,
+)
+_job_type = postgresql.ENUM(
+    "transcription", "diarization", "export",
+    name="jobtype", create_type=False,
+)
+_note_type = postgresql.ENUM(
+    "general", "action_item", "decision", "question",
+    name="notetype", create_type=False,
+)
+
 
 def upgrade() -> None:
-    # ── Enum types ─────────────────────────────────────────────────────────
+    # ── Enum types (idempotent) ────────────────────────────────────────────
     op.execute("""
         DO $$ BEGIN
             CREATE TYPE meetingstatus AS ENUM ('pending','uploading','queued','processing','transcribed','failed');
@@ -42,181 +61,167 @@ def upgrade() -> None:
     """)
 
     # ── users ──────────────────────────────────────────────────────────────
-    op.create_table(
-        "users",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("email", sa.String(255), nullable=False),
-        sa.Column("hashed_password", sa.String(255), nullable=False),
-        sa.Column("display_name", sa.String(120), nullable=False, server_default=""),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            hashed_password VARCHAR(255) NOT NULL,
+            display_name VARCHAR(120) NOT NULL DEFAULT '',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)")
 
     # ── calendar_events ────────────────────────────────────────────────────
-    op.create_table(
-        "calendar_events",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("provider", sa.String(30), nullable=False, server_default="google"),
-        sa.Column("external_id", sa.String(500), nullable=False),
-        sa.Column("title", sa.String(500), nullable=False),
-        sa.Column("attendees", postgresql.JSONB(), nullable=True),
-        sa.Column("start_time", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("end_time", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("synced_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider VARCHAR(30) NOT NULL DEFAULT 'google',
+            external_id VARCHAR(500) NOT NULL,
+            title VARCHAR(500) NOT NULL,
+            attendees JSONB,
+            start_time TIMESTAMPTZ,
+            end_time TIMESTAMPTZ,
+            synced_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
 
     # ── meetings ───────────────────────────────────────────────────────────
-    op.create_table(
-        "meetings",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("calendar_event_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("title", sa.String(500), nullable=False, server_default="Untitled meeting"),
-        sa.Column("status", sa.Enum(
-            "pending", "uploading", "queued", "processing", "transcribed", "failed",
-            name="meetingstatus", create_type=False,
-        ), nullable=False, server_default="pending"),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("tags", postgresql.JSONB(), nullable=True),
-        sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
-    op.create_index("ix_meetings_status", "meetings", ["status"])
-    op.create_index("ix_meetings_created_at", "meetings", ["created_at"])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS meetings (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            calendar_event_id UUID REFERENCES calendar_events(id) ON DELETE SET NULL,
+            title VARCHAR(500) NOT NULL DEFAULT 'Untitled meeting',
+            status meetingstatus NOT NULL DEFAULT 'pending',
+            description TEXT,
+            tags JSONB,
+            recorded_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_meetings_status ON meetings (status)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_meetings_created_at ON meetings (created_at)")
 
     # ── media_files ────────────────────────────────────────────────────────
-    op.create_table(
-        "media_files",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("meeting_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("file_path", sa.String(1000), nullable=False),
-        sa.Column("original_filename", sa.String(500), nullable=False),
-        sa.Column("mime_type", sa.String(120), nullable=True),
-        sa.Column("file_size_bytes", sa.Integer(), nullable=True),
-        sa.Column("duration_seconds", sa.Integer(), nullable=True),
-        sa.Column("storage_backend", sa.String(20), nullable=False, server_default="local"),
-        sa.Column("uploaded_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS media_files (
+            id UUID PRIMARY KEY,
+            meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            file_path VARCHAR(1000) NOT NULL,
+            original_filename VARCHAR(500) NOT NULL,
+            mime_type VARCHAR(120),
+            file_size_bytes INTEGER,
+            duration_seconds INTEGER,
+            storage_backend VARCHAR(20) NOT NULL DEFAULT 'local',
+            uploaded_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
 
     # ── speakers ───────────────────────────────────────────────────────────
-    op.create_table(
-        "speakers",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("meeting_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("label", sa.String(50), nullable=False),
-        sa.Column("display_name", sa.String(120), nullable=True),
-        sa.Column("color_hex", sa.String(7), nullable=False, server_default="#6366f1"),
-        sa.Column("avatar_url", sa.String(500), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS speakers (
+            id UUID PRIMARY KEY,
+            meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            label VARCHAR(50) NOT NULL,
+            display_name VARCHAR(120),
+            color_hex VARCHAR(7) NOT NULL DEFAULT '#6366f1',
+            avatar_url VARCHAR(500),
+            created_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
 
     # ── transcript_segments ────────────────────────────────────────────────
-    op.create_table(
-        "transcript_segments",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("meeting_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("speaker_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("speakers.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("segment_index", sa.Integer(), nullable=False),
-        sa.Column("start_time", sa.Float(), nullable=False),
-        sa.Column("end_time", sa.Float(), nullable=False),
-        sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("confidence", sa.Float(), nullable=True),
-        sa.Column("is_edited", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("edited_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
-    op.create_index(
-        "ix_transcript_segments_meeting_index",
-        "transcript_segments",
-        ["meeting_id", "segment_index"],
-    )
     op.execute("""
-        CREATE INDEX ix_transcript_segments_fts
+        CREATE TABLE IF NOT EXISTS transcript_segments (
+            id UUID PRIMARY KEY,
+            meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            speaker_id UUID REFERENCES speakers(id) ON DELETE SET NULL,
+            segment_index INTEGER NOT NULL,
+            start_time FLOAT NOT NULL,
+            end_time FLOAT NOT NULL,
+            content TEXT NOT NULL,
+            confidence FLOAT,
+            is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+            edited_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_transcript_segments_meeting_index
+        ON transcript_segments (meeting_id, segment_index)
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_transcript_segments_fts
         ON transcript_segments
         USING gin(to_tsvector('english', content))
     """)
 
     # ── notes ──────────────────────────────────────────────────────────────
-    op.create_table(
-        "notes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("meeting_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("note_type", sa.Enum(
-            "general", "action_item", "decision", "question",
-            name="notetype", create_type=False,
-        ), nullable=False, server_default="general"),
-        sa.Column("body", sa.Text(), nullable=False),
-        sa.Column("timestamp_ref", sa.Float(), nullable=True),
-        sa.Column("is_action_item", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("is_decision", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS notes (
+            id UUID PRIMARY KEY,
+            meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            note_type notetype NOT NULL DEFAULT 'general',
+            body TEXT NOT NULL,
+            timestamp_ref FLOAT,
+            is_action_item BOOLEAN NOT NULL DEFAULT FALSE,
+            is_decision BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
 
     # ── jobs ───────────────────────────────────────────────────────────────
-    op.create_table(
-        "jobs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("meeting_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("celery_task_id", sa.String(200), nullable=True),
-        sa.Column("job_type", sa.Enum(
-            "transcription", "diarization", "export",
-            name="jobtype", create_type=False,
-        ), nullable=False, server_default="transcription"),
-        sa.Column("status", sa.Enum(
-            "queued", "processing", "completed", "failed", "cancelled",
-            name="jobstatus", create_type=False,
-        ), nullable=False, server_default="queued"),
-        sa.Column("progress", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("message", sa.String(500), nullable=True),
-        sa.Column("error_info", postgresql.JSONB(), nullable=True),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
-    op.create_index("ix_jobs_celery_task_id", "jobs", ["celery_task_id"])
-    op.create_index("ix_jobs_status", "jobs", ["status"])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id UUID PRIMARY KEY,
+            meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            celery_task_id VARCHAR(200),
+            job_type jobtype NOT NULL DEFAULT 'transcription',
+            status jobstatus NOT NULL DEFAULT 'queued',
+            progress FLOAT NOT NULL DEFAULT 0,
+            message VARCHAR(500),
+            error_info JSONB,
+            started_at TIMESTAMPTZ,
+            completed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_jobs_celery_task_id ON jobs (celery_task_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_jobs_status ON jobs (status)")
 
     # ── app_settings ───────────────────────────────────────────────────────
-    op.create_table(
-        "app_settings",
-        sa.Column("key", sa.String(100), primary_key=True),
-        sa.Column("value", sa.Text(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key VARCHAR(100) PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT now()
+        )
+    """)
 
 
 def downgrade() -> None:
     op.drop_table("app_settings")
     op.drop_table("jobs")
     op.drop_table("notes")
-    op.drop_index("ix_transcript_segments_fts", table_name="transcript_segments")
-    op.drop_index("ix_transcript_segments_meeting_index", table_name="transcript_segments")
+    op.execute("DROP INDEX IF EXISTS ix_transcript_segments_fts")
+    op.execute("DROP INDEX IF EXISTS ix_transcript_segments_meeting_index")
     op.drop_table("transcript_segments")
     op.drop_table("speakers")
     op.drop_table("media_files")
-    op.drop_index("ix_meetings_created_at", table_name="meetings")
-    op.drop_index("ix_meetings_status", table_name="meetings")
+    op.execute("DROP INDEX IF EXISTS ix_meetings_created_at")
+    op.execute("DROP INDEX IF EXISTS ix_meetings_status")
     op.drop_table("meetings")
     op.drop_table("calendar_events")
-    op.drop_index("ix_users_email", table_name="users")
+    op.execute("DROP INDEX IF EXISTS ix_users_email")
     op.drop_table("users")
-    op.execute("DROP TYPE notetype")
-    op.execute("DROP TYPE jobtype")
-    op.execute("DROP TYPE jobstatus")
-    op.execute("DROP TYPE meetingstatus")
+    op.execute("DROP TYPE IF EXISTS notetype")
+    op.execute("DROP TYPE IF EXISTS jobtype")
+    op.execute("DROP TYPE IF EXISTS jobstatus")
+    op.execute("DROP TYPE IF EXISTS meetingstatus")
