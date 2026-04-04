@@ -96,6 +96,11 @@ export const meetings = {
   delete: (id: string) => request(`/meetings/${id}`, { method: "DELETE" }),
 };
 
+// ── Media ──────────────────────────────────────────────────────────────────
+export const media = {
+  list: (meetingId: string) => request<{ id: string; file_path: string; mime_type: string | null }[]>(`/meetings/${meetingId}/media`),
+};
+
 // ── Upload ─────────────────────────────────────────────────────────────────
 export function uploadMedia(
   meetingId: string,

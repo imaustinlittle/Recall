@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi } from "@/lib/api";
+import { meetings as meetingsApi, transcript as transcriptApi, speakers as speakersApi, jobs as jobsApi, media as mediaApi } from "@/lib/api";
 import { Meeting, TranscriptSegment, Speaker, Job } from "@/lib/types";
 import { useJobStatus } from "@/lib/useJobStatus";
 import { useAuth } from "@/lib/useAuth";
@@ -30,6 +30,7 @@ export default function MeetingPage() {
   );
   const [jobsLoaded, setJobsLoaded] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Watch job progress via WS/polling
@@ -77,12 +78,21 @@ export default function MeetingPage() {
 
   const loadTranscript = useCallback(async () => {
     try {
-      const [segs, spks] = await Promise.all([
+      const [segs, spks, mediaFiles] = await Promise.all([
         transcriptApi.get(id) as Promise<TranscriptSegment[]>,
         speakersApi.list(id) as Promise<Speaker[]>,
+        mediaApi.list(id),
       ]);
       setSegments(segs);
       setSpeakers(spks);
+      // Derive the public URL from the server file_path
+      // file_path is like /data/media/{meeting_id}/{file_id}.mp3
+      // public URL is         /media/{meeting_id}/{file_id}.mp3
+      if (mediaFiles.length > 0) {
+        const fp = mediaFiles[0].file_path;
+        const publicUrl = fp.replace(/^\/data/, "");
+        setAudioSrc(publicUrl);
+      }
     } finally {
       setLoading(false);
     }
@@ -130,7 +140,6 @@ export default function MeetingPage() {
     }
   };
 
-  const mediaUrl = `/media/${id}`;
   const isProcessing = ["queued", "processing"].includes(meeting.status);
   const hasTranscript = segments.length > 0;
 
@@ -200,9 +209,9 @@ export default function MeetingPage() {
       </main>
 
       {/* Sticky audio player — shown once transcript is ready */}
-      {hasTranscript && (
+      {hasTranscript && audioSrc && (
         <AudioPlayer
-          src={`${mediaUrl}/`}
+          src={audioSrc}
           audioRef={audioRef}
           onTimeUpdate={setCurrentTime}
         />
