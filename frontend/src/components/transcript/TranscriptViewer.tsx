@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { TranscriptSegment, Speaker, NoteType } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
 
@@ -15,6 +15,11 @@ interface Props {
   onSegmentUpdate: (segmentId: string, content: string) => Promise<void>;
   onSpeakerRename: (speakerId: string, name: string) => Promise<void>;
   onAddNote?: (timestamp: number, body: string, type: NoteType) => Promise<void>;
+}
+
+export interface TranscriptViewerHandle {
+  openNoteForActiveBlock: () => void;
+  editActiveSpeaker: () => void;
 }
 
 interface SpeechBlock {
@@ -51,13 +56,12 @@ function buildBlocks(segments: TranscriptSegment[]): SpeechBlock[] {
   return blocks;
 }
 
-/** Returns true if two time ranges overlap (with a small tolerance). */
 function overlaps(a: SpeechBlock, b: SpeechBlock): boolean {
-  const TOLERANCE = 0.5; // seconds
+  const TOLERANCE = 0.5;
   return a.end_time - TOLERANCE > b.start_time;
 }
 
-// ── Inline note form (per speech block) ────────────────────────────────────────
+// ── Inline note form ───────────────────────────────────────────────────────────
 
 const NOTE_TYPES: { key: NoteType; label: string; icon: string }[] = [
   { key: "general",     label: "Note",        icon: "📝" },
@@ -80,9 +84,7 @@ function InlineNoteForm({
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
+  useEffect(() => { textareaRef.current?.focus(); }, []);
 
   const handleSave = async () => {
     if (!body.trim()) return;
@@ -90,11 +92,6 @@ function InlineNoteForm({
     await onSave(body.trim(), type);
     setSaving(false);
     onClose();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
-    if (e.key === "Escape") onClose();
   };
 
   return (
@@ -115,7 +112,10 @@ function InlineNoteForm({
         ref={textareaRef}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
+          if (e.key === "Escape") onClose();
+        }}
         placeholder="Add a note… (Ctrl+Enter to save)"
         rows={2}
         className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white"
@@ -136,7 +136,7 @@ function InlineNoteForm({
   );
 }
 
-// ── Edit area (auto-sized, cursor at top, blur-to-cancel) ─────────────────────
+// ── Edit area ──────────────────────────────────────────────────────────────────
 
 function EditArea({
   draft,
@@ -153,7 +153,6 @@ function EditArea({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // On mount: auto-size to content height and move cursor to the start
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -163,7 +162,6 @@ function EditArea({
     el.scrollTop = 0;
   }, []);
 
-  // Resize whenever draft changes
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -196,7 +194,7 @@ function EditArea({
         <button onClick={onCancel} className="text-xs text-gray-500 px-3 py-1 rounded-lg hover:bg-gray-100">
           Cancel
         </button>
-        <span className="text-xs text-gray-300 ml-1">Ctrl+Enter to save, Esc to cancel</span>
+        <span className="text-xs text-gray-300 ml-1">Ctrl+Enter to save · Esc to cancel</span>
       </div>
     </div>
   );
@@ -204,14 +202,15 @@ function EditArea({
 
 // ── Single speech block ────────────────────────────────────────────────────────
 
-function SpeechBlock({
+function SpeechBlockCard({
   block,
   isActive,
-  activeSegmentId,
   editingId,
   editDraft,
   saving,
   blockRef,
+  forceNoteOpen,
+  onNoteOpened,
   onSeek,
   onStartEdit,
   onCancelEdit,
@@ -222,11 +221,12 @@ function SpeechBlock({
 }: {
   block: SpeechBlock;
   isActive: boolean;
-  activeSegmentId: string | null;
   editingId: string | null;
   editDraft: string;
   saving: boolean;
   blockRef?: React.Ref<HTMLDivElement>;
+  forceNoteOpen?: boolean;
+  onNoteOpened?: () => void;
   onSeek: (t: number) => void;
   onStartEdit: (seg: TranscriptSegment) => void;
   onCancelEdit: () => void;
@@ -237,11 +237,15 @@ function SpeechBlock({
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
 
-  const combinedText = block.segments
-    .map((s) => s.content.trim())
-    .filter(Boolean)
-    .join(" ");
+  // Keyboard shortcut D can force this block's note form open
+  useEffect(() => {
+    if (forceNoteOpen && !noteOpen) {
+      setNoteOpen(true);
+      onNoteOpened?.();
+    }
+  }, [forceNoteOpen]);
 
+  const combinedText = block.segments.map((s) => s.content.trim()).filter(Boolean).join(" ");
   const hasEdit = block.segments.some((s) => s.is_edited);
   const editingSeg = block.segments.find((s) => s.id === editingId) ?? null;
 
@@ -249,14 +253,10 @@ function SpeechBlock({
     <div
       ref={blockRef}
       className={`group relative rounded-2xl p-4 transition-all ${
-        isActive
-          ? "ring-2 ring-inset shadow-sm"
-          : "hover:shadow-sm"
+        isActive ? "ring-2 ring-inset shadow-sm" : "hover:shadow-sm"
       } ${dimmed ? "opacity-60" : ""}`}
       style={{
-        backgroundColor: isActive
-          ? `${block.speakerColor}15`
-          : "transparent",
+        backgroundColor: isActive ? `${block.speakerColor}15` : "transparent",
         ringColor: isActive ? block.speakerColor : undefined,
       } as React.CSSProperties}
     >
@@ -267,14 +267,8 @@ function SpeechBlock({
           className="flex items-center gap-2 group/ts"
           title={`Jump to ${formatTime(block.start_time)}`}
         >
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ backgroundColor: block.speakerColor }}
-          />
-          <span
-            className="text-xs font-semibold"
-            style={{ color: block.speakerColor }}
-          >
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: block.speakerColor }} />
+          <span className="text-xs font-semibold" style={{ color: block.speakerColor }}>
             {block.speakerName}
           </span>
           <span className="font-mono text-xs text-gray-400 group-hover/ts:text-brand-500 transition-colors">
@@ -282,23 +276,21 @@ function SpeechBlock({
           </span>
         </button>
 
-        {hasEdit && (
-          <span className="text-xs text-gray-300 ml-1">edited</span>
-        )}
+        {hasEdit && <span className="text-xs text-gray-300 ml-1">edited</span>}
 
-        {/* Note button — shown on hover */}
+        {/* Note button — always visible, prominent */}
         {onAddNote && !noteOpen && (
           <button
             onClick={() => setNoteOpen(true)}
-            className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-400 hover:text-brand-500 flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-brand-50"
-            title="Add a note to this moment"
+            className="ml-auto text-xs text-gray-400 hover:text-brand-600 flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-gray-200 hover:border-brand-400 hover:bg-brand-50 transition-colors"
+            title="Add a note (D)"
           >
             + note
           </button>
         )}
       </div>
 
-      {/* Paragraph text — editing state per segment */}
+      {/* Content */}
       {editingSeg ? (
         <EditArea
           draft={editDraft}
@@ -321,9 +313,7 @@ function SpeechBlock({
       {noteOpen && onAddNote && (
         <InlineNoteForm
           timestamp={block.start_time}
-          onSave={async (body, type) => {
-            await onAddNote(block.start_time, body, type);
-          }}
+          onSave={async (body, type) => { await onAddNote(block.start_time, body, type); }}
           onClose={() => setNoteOpen(false)}
         />
       )}
@@ -331,18 +321,19 @@ function SpeechBlock({
   );
 }
 
-// ── Overlap row (two speakers talking simultaneously) ─────────────────────────
+// ── Overlap row ────────────────────────────────────────────────────────────────
 
 function OverlapRow({
   left,
   right,
   isActiveLeft,
   isActiveRight,
-  activeSegmentId,
   editingId,
   editDraft,
   saving,
   activeRef,
+  forceNoteOpenKey,
+  onNoteOpened,
   onSeek,
   onStartEdit,
   onCancelEdit,
@@ -354,11 +345,12 @@ function OverlapRow({
   right: SpeechBlock;
   isActiveLeft: boolean;
   isActiveRight: boolean;
-  activeSegmentId: string | null;
   editingId: string | null;
   editDraft: string;
   saving: boolean;
   activeRef?: React.Ref<HTMLDivElement>;
+  forceNoteOpenKey: string | null;
+  onNoteOpened: () => void;
   onSeek: (t: number) => void;
   onStartEdit: (seg: TranscriptSegment) => void;
   onCancelEdit: () => void;
@@ -366,51 +358,34 @@ function OverlapRow({
   onDraftChange: (v: string) => void;
   onAddNote?: (timestamp: number, body: string, type: NoteType) => Promise<void>;
 }) {
+  const sharedBlockProps = { editingId, editDraft, saving, onSeek, onStartEdit, onCancelEdit, onSaveEdit, onDraftChange, onAddNote };
   return (
     <div className="relative">
-      {/* Overlap indicator label */}
       <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10">
         <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-200 shadow-sm whitespace-nowrap">
           speaking simultaneously
         </span>
       </div>
       <div className="flex gap-3 mt-2">
-        {/* Left speaker — slightly overlaps right via negative margin trick */}
         <div className="flex-1">
-          <SpeechBlock
+          <SpeechBlockCard
             block={left}
             isActive={isActiveLeft}
-            activeSegmentId={activeSegmentId}
-            editingId={editingId}
-            editDraft={editDraft}
-            saving={saving}
             blockRef={isActiveLeft ? activeRef : undefined}
-            onSeek={onSeek}
-            onStartEdit={onStartEdit}
-            onCancelEdit={onCancelEdit}
-            onSaveEdit={onSaveEdit}
-            onDraftChange={onDraftChange}
-            onAddNote={onAddNote}
+            forceNoteOpen={forceNoteOpenKey === left.key}
+            onNoteOpened={onNoteOpened}
+            {...sharedBlockProps}
           />
         </div>
-        {/* Divider */}
         <div className="w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent self-stretch" />
-        {/* Right speaker */}
         <div className="flex-1">
-          <SpeechBlock
+          <SpeechBlockCard
             block={right}
             isActive={isActiveRight}
-            activeSegmentId={activeSegmentId}
-            editingId={editingId}
-            editDraft={editDraft}
-            saving={saving}
             blockRef={isActiveRight ? activeRef : undefined}
-            onSeek={onSeek}
-            onStartEdit={onStartEdit}
-            onCancelEdit={onCancelEdit}
-            onSaveEdit={onSaveEdit}
-            onDraftChange={onDraftChange}
-            onAddNote={onAddNote}
+            forceNoteOpen={forceNoteOpenKey === right.key}
+            onNoteOpened={onNoteOpened}
+            {...sharedBlockProps}
           />
         </div>
       </div>
@@ -420,7 +395,7 @@ function OverlapRow({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function TranscriptViewer({
+export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(function TranscriptViewer({
   segments,
   speakers,
   currentTime,
@@ -428,19 +403,22 @@ export function TranscriptViewer({
   onSegmentUpdate,
   onSpeakerRename,
   onAddNote,
-}: Props) {
+}, ref) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [noteOpenKey, setNoteOpenKey] = useState<string | null>(null);
+  const [editSpeakerId, setEditSpeakerId] = useState<string | null>(null);
 
   const activeSegment = segments.findLast((s) => s.start_time <= currentTime);
   const activeRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // startEdit uses combined block text so the textarea shows the full paragraph
+  const blocks = buildBlocks(segments);
+  const activeBlock = blocks.find((b) => b.segments.some((s) => s.id === activeSegment?.id));
+
   const startEdit = (seg: TranscriptSegment) => {
-    // Find which block this segment belongs to and use combined text
-    const block = buildBlocks(segments).find((b) => b.segments.some((s) => s.id === seg.id));
+    const block = blocks.find((b) => b.segments.some((s) => s.id === seg.id));
     const combinedText = block
       ? block.segments.map((s) => s.content.trim()).filter(Boolean).join(" ")
       : seg.content;
@@ -448,9 +426,8 @@ export function TranscriptViewer({
     setDraft(combinedText);
   };
 
-  const blocks = buildBlocks(segments);
-  const activeBlock = blocks.find((b) => b.segments.some((s) => s.id === activeSegment?.id));
   const cancelEdit = () => { setEditingId(null); setDraft(""); };
+
   const saveEdit = async (segmentId: string) => {
     setSaving(true);
     try {
@@ -461,7 +438,17 @@ export function TranscriptViewer({
     }
   };
 
-  // Click outside the transcript container cancels edit
+  // Expose imperative methods to page level for keyboard shortcuts
+  useImperativeHandle(ref, () => ({
+    openNoteForActiveBlock: () => {
+      if (activeBlock) setNoteOpenKey(activeBlock.key);
+    },
+    editActiveSpeaker: () => {
+      if (activeBlock?.speakerId) setEditSpeakerId(activeBlock.speakerId);
+    },
+  }), [activeBlock]);
+
+  // Click outside cancels edit
   useEffect(() => {
     if (!editingId) return;
     const handler = (e: MouseEvent) => {
@@ -473,14 +460,12 @@ export function TranscriptViewer({
     return () => document.removeEventListener("mousedown", handler);
   }, [editingId]);
 
-  // Scroll only when the active BLOCK changes, not every segment within a block
+  // Scroll when active block changes
   useEffect(() => {
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeBlock?.key]);
 
-
-
-  // Build render items: single blocks or overlap pairs
+  // Build render items
   type RenderItem =
     | { type: "single"; block: SpeechBlock }
     | { type: "overlap"; left: SpeechBlock; right: SpeechBlock };
@@ -503,7 +488,6 @@ export function TranscriptViewer({
     editingId,
     editDraft: draft,
     saving,
-    activeSegmentId: activeSegment?.id ?? null,
     onSeek,
     onStartEdit: startEdit,
     onCancelEdit: cancelEdit,
@@ -521,6 +505,8 @@ export function TranscriptViewer({
             <SpeakerChip
               key={sp.id}
               speaker={sp}
+              forceEdit={editSpeakerId === sp.id}
+              onForceEditDone={() => setEditSpeakerId(null)}
               onRename={(name) => onSpeakerRename(sp.id, name)}
             />
           ))}
@@ -529,15 +515,17 @@ export function TranscriptViewer({
 
       {/* Speech blocks */}
       <div className="p-4 space-y-1">
-        {items.map((item, idx) => {
+        {items.map((item) => {
           if (item.type === "single") {
             const isActive = item.block.segments.some((s) => s.id === activeSegment?.id);
             return (
-              <SpeechBlock
+              <SpeechBlockCard
                 key={item.block.key}
                 block={item.block}
                 isActive={isActive}
                 blockRef={isActive ? activeRef : undefined}
+                forceNoteOpen={noteOpenKey === item.block.key}
+                onNoteOpened={() => setNoteOpenKey(null)}
                 {...sharedEditProps}
               />
             );
@@ -552,6 +540,8 @@ export function TranscriptViewer({
               isActiveLeft={isActiveLeft}
               isActiveRight={isActiveRight}
               activeRef={(isActiveLeft || isActiveRight) ? activeRef : undefined}
+              forceNoteOpenKey={noteOpenKey}
+              onNoteOpened={() => setNoteOpenKey(null)}
               {...sharedEditProps}
             />
           );
@@ -559,13 +549,31 @@ export function TranscriptViewer({
       </div>
     </div>
   );
-}
+});
 
-// ── Speaker chip (legend) ──────────────────────────────────────────────────────
+// ── Speaker chip ───────────────────────────────────────────────────────────────
 
-function SpeakerChip({ speaker, onRename }: { speaker: Speaker; onRename: (name: string) => Promise<void> }) {
+function SpeakerChip({
+  speaker,
+  forceEdit,
+  onForceEditDone,
+  onRename,
+}: {
+  speaker: Speaker;
+  forceEdit?: boolean;
+  onForceEditDone?: () => void;
+  onRename: (name: string) => Promise<void>;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(speaker.display_name || speaker.label);
+
+  // Keyboard shortcut Q can force edit mode
+  useEffect(() => {
+    if (forceEdit && !editing) {
+      setEditing(true);
+      onForceEditDone?.();
+    }
+  }, [forceEdit]);
 
   const save = async () => {
     setEditing(false);
@@ -591,7 +599,7 @@ function SpeakerChip({ speaker, onRename }: { speaker: Speaker; onRename: (name:
     <button
       onClick={() => setEditing(true)}
       className="inline-flex items-center gap-1.5 text-xs rounded-full px-3 py-1 border border-gray-200 hover:border-gray-300 transition-colors"
-      title="Click to rename speaker"
+      title="Click to rename speaker (Q)"
     >
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: speaker.color_hex }} />
       {speaker.display_name || speaker.label}
