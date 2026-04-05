@@ -1,17 +1,63 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/useAuth";
+import { meetings as meetingsApi } from "@/lib/api";
+import { MeetingListOut } from "@/lib/types";
+import { MiniCalendar } from "@/components/calendar/MiniCalendar";
 
-interface SidebarProps {
-  /** Optional content rendered below nav links (e.g. the MiniCalendar on the dashboard) */
-  extra?: React.ReactNode;
+function monthStart(year: number, month: number) {
+  return `${year}-${String(month + 1).padStart(2, "0")}-01`;
+}
+function monthEnd(year: number, month: number) {
+  const last = new Date(year, month + 1, 0).getDate();
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
 }
 
-export function Sidebar({ extra }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { user, logout } = useAuth();
+
+  const now = new Date();
+  const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const [monthDates, setMonthDates] = useState<string[]>([]);
+
+  // Selected date comes from the URL so it stays in sync with the dashboard
+  const selectedDate = searchParams.get("date");
+
+  // Fetch meeting dates for the visible calendar month
+  useEffect(() => {
+    if (!user) return;
+    meetingsApi
+      .list({ date_from: monthStart(calYear, calMonth), date_to: monthEnd(calYear, calMonth), limit: 100 })
+      .then((d) => {
+        const items = (d as MeetingListOut).items;
+        setMonthDates(items.map((m) => m.created_at.slice(0, 10)));
+      })
+      .catch(() => {});
+  }, [user, calYear, calMonth]);
+
+  const activeDates = useMemo(() => new Set(monthDates), [monthDates]);
+
+  const handleDateSelect = (date: string | null) => {
+    if (date) {
+      router.push(`/?date=${date}`);
+    } else {
+      router.push("/");
+    }
+  };
+
+  const handleMonthChange = (year: number, month: number) => {
+    setCalYear(year);
+    setCalMonth(month);
+    // Clear date filter when navigating months
+    if (pathname === "/") router.push("/");
+  };
 
   return (
     <aside className="w-64 shrink-0 flex flex-col bg-gray-900 text-gray-100 h-full overflow-y-auto">
@@ -27,31 +73,31 @@ export function Sidebar({ extra }: SidebarProps) {
         </div>
       </div>
 
+      {/* Calendar — always visible */}
+      <div className="px-4 py-2">
+        <MiniCalendar
+          year={calYear}
+          month={calMonth}
+          activeDates={activeDates}
+          selectedDate={selectedDate}
+          onDateSelect={handleDateSelect}
+          onMonthChange={handleMonthChange}
+          dark
+        />
+      </div>
+
+      {/* Divider */}
+      <div className="mx-4 my-2 border-t border-white/10" />
+
       {/* Nav */}
       <nav className="px-3 pb-2 space-y-0.5">
-        <NavItem
-          href="/"
-          active={pathname === "/"}
-          icon={<MeetingsIcon />}
-        >
+        <NavItem href="/" active={pathname === "/"} icon={<MeetingsIcon />}>
           Meetings
         </NavItem>
-        <NavItem
-          href="/admin"
-          active={pathname === "/admin"}
-          icon={<SettingsIcon />}
-        >
+        <NavItem href="/admin" active={pathname === "/admin"} icon={<SettingsIcon />}>
           Settings
         </NavItem>
       </nav>
-
-      {/* Extra slot (e.g. calendar) */}
-      {extra && (
-        <>
-          <div className="mx-4 my-2 border-t border-white/10" />
-          <div className="px-4 py-2">{extra}</div>
-        </>
-      )}
 
       <div className="flex-1" />
 
@@ -85,9 +131,7 @@ function NavItem({
       href={href}
       className={[
         "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-        active
-          ? "bg-white/10 text-white"
-          : "text-gray-400 hover:bg-white/5 hover:text-gray-100",
+        active ? "bg-white/10 text-white" : "text-gray-400 hover:bg-white/5 hover:text-gray-100",
       ].join(" ")}
     >
       <span className="w-4 h-4 shrink-0">{icon}</span>

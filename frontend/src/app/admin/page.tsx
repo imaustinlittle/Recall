@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { adminApi } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { Spinner } from "@/components/ui/Spinner";
+import { Sidebar } from "@/components/layout/Sidebar";
 
 // ── Types mirroring the backend schema ──────────────────────────────────────
 
@@ -193,7 +193,7 @@ export default function AdminPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Spinner size="lg" />
       </div>
     );
@@ -206,121 +206,109 @@ export default function AdminPage() {
   const pendingRestartKeys = saveResult?.restart_required ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Nav */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-xl font-semibold text-brand-600">
-            Recall
-          </Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-sm font-medium text-gray-600">Settings</span>
-        </div>
-        <span className="text-sm text-gray-500">{user.email}</span>
-      </header>
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      <Sidebar />
 
-      <main className="max-w-3xl mx-auto px-6 py-10 space-y-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Application Settings</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Changes are saved to the database and survive container restarts.
-            Settings marked <span className="font-medium text-amber-600">Restart Required</span> take
-            effect after you restart the container.
-          </p>
-        </div>
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top bar */}
+        <header className="shrink-0 bg-white border-b border-gray-100 px-8 py-5 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
+            <p className="text-xs text-gray-400 mt-0.5">Application configuration</p>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+            className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+          >
+            {saving && <Spinner size="sm" />}
+            {saving ? "Saving…" : "Save settings"}
+          </button>
+        </header>
 
-        {/* Warnings */}
-        {data?.warnings.default_secret_key && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <strong>Security warning:</strong> SECRET_KEY is set to the default placeholder value.
-            Set a strong random key via the <code className="font-mono">SECRET_KEY</code> environment
-            variable before exposing this service publicly.
-          </div>
-        )}
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="max-w-2xl space-y-6">
+            <p className="text-sm text-gray-500">
+              Changes are saved to the database and survive container restarts.
+              Settings marked <span className="font-medium text-amber-600">Restart Required</span> take
+              effect after you restart the container.
+            </p>
 
-        {/* Restart notice */}
-        {pendingRestartKeys.length > 0 && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <strong>Restart required</strong> — the following settings were saved but won&apos;t take
-            effect until you restart the container:{" "}
-            <span className="font-mono">{pendingRestartKeys.join(", ")}</span>.
-          </div>
-        )}
+            {/* Warnings */}
+            {data?.warnings.default_secret_key && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <strong>Security warning:</strong> SECRET_KEY is set to the default placeholder value.
+                Set a strong random key via the <code className="font-mono">SECRET_KEY</code> environment
+                variable before exposing this service publicly.
+              </div>
+            )}
 
-        {/* Save error */}
-        {saveError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {saveError}
-          </div>
-        )}
+            {pendingRestartKeys.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <strong>Restart required</strong> — the following settings were saved but won&apos;t take
+                effect until you restart the container:{" "}
+                <span className="font-mono">{pendingRestartKeys.join(", ")}</span>.
+              </div>
+            )}
 
-        {/* Loading / error */}
-        {loadError ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {loadError}
-          </div>
-        ) : !data ? (
-          <div className="flex justify-center py-24">
-            <Spinner size="lg" />
-          </div>
-        ) : (
-          <>
-            {Object.entries(sections).map(([section, entries]) => (
-              <section key={section} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                    {section}
-                  </h2>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {entries.map((entry) => (
-                    <div key={entry.key} className="px-6 py-5">
-                      <div className="flex items-start justify-between gap-4 mb-2">
-                        <div>
-                          <label className="text-sm font-medium text-gray-900">
-                            {entry.label}
-                          </label>
-                          {entry.restart_required && (
-                            <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                              Restart required
-                            </span>
-                          )}
-                          {entry.has_db_override && (
-                            <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                              Overridden
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-500 mb-3">{entry.description}</p>
-                      <SettingInput
-                        entry={entry}
-                        value={draft[entry.key] ?? ""}
-                        onChange={(v) => setDraft((d) => ({ ...d, [entry.key]: v }))}
-                      />
+            {saveError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {saveError}
+              </div>
+            )}
+
+            {loadError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {loadError}
+              </div>
+            ) : !data ? (
+              <div className="flex justify-center py-24">
+                <Spinner size="lg" />
+              </div>
+            ) : (
+              <>
+                {Object.entries(sections).map(([section, entries]) => (
+                  <section key={section} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-100">
+                      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        {section}
+                      </h2>
                     </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-
-            {/* Save button */}
-            <div className="flex items-center justify-between pt-2">
-              <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
-                ← Back to meetings
-              </Link>
-              <button
-                onClick={handleSave}
-                disabled={saving || !hasChanges}
-                className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {saving && <Spinner size="sm" />}
-                {saving ? "Saving…" : "Save settings"}
-              </button>
-            </div>
-          </>
-        )}
-      </main>
+                    <div className="divide-y divide-gray-100">
+                      {entries.map((entry) => (
+                        <div key={entry.key} className="px-6 py-5">
+                          <div className="flex items-start gap-2 mb-1">
+                            <label className="text-sm font-medium text-gray-900">
+                              {entry.label}
+                            </label>
+                            {entry.restart_required && (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                Restart required
+                              </span>
+                            )}
+                            {entry.has_db_override && (
+                              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                Overridden
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 mb-3">{entry.description}</p>
+                          <SettingInput
+                            entry={entry}
+                            value={draft[entry.key] ?? ""}
+                            onChange={(v) => setDraft((d) => ({ ...d, [entry.key]: v }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
