@@ -336,7 +336,11 @@ export default function MeetingPage() {
           />
         )}
         {hasTranscript && !meeting.summary && meeting.status === "transcribed" && (
-          <SummaryPending />
+          <SummaryPending
+            onGenerate={async () => {
+              await meetingsApi.summarize(id);
+            }}
+          />
         )}
 
         <NotesPanel

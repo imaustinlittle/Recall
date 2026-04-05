@@ -101,17 +101,55 @@ export function SummaryPanel({
   );
 }
 
-export function SummaryPending() {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-5 flex items-center gap-3">
-      <svg className="animate-spin h-4 w-4 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-      </svg>
-      <div>
-        <p className="text-sm font-medium text-gray-700">Generating summary…</p>
-        <p className="text-xs text-gray-400">This usually takes 30–60 seconds.</p>
+export function SummaryPending({
+  onGenerate,
+}: {
+  onGenerate?: () => Promise<void>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [queued, setQueued] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!onGenerate) return;
+    setLoading(true);
+    await onGenerate();
+    setLoading(false);
+    setQueued(true);
+  };
+
+  if (queued) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-5 flex items-center gap-3">
+        <svg className="animate-spin h-4 w-4 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+        <div>
+          <p className="text-sm font-medium text-gray-700">Generating summary…</p>
+          <p className="text-xs text-gray-400">This usually takes 30–60 seconds.</p>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-5 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm">✨</span>
+        <div>
+          <p className="text-sm font-medium text-gray-700">No summary yet</p>
+          <p className="text-xs text-gray-400">Generate an AI summary of this meeting.</p>
+        </div>
+      </div>
+      {onGenerate && (
+        <button
+          onClick={handleGenerate}
+          disabled={loading}
+          className="text-sm px-3 py-1.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-50 transition-colors shrink-0"
+        >
+          {loading ? "Starting…" : "Generate Summary"}
+        </button>
+      )}
     </div>
   );
 }
