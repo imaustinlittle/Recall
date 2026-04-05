@@ -178,7 +178,7 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
             )
 
             # Automatically kick off summarization
-            summarize_meeting.delay(meeting_id)
+            summarize_meeting.apply_async(args=[meeting_id], queue="default")
 
         except Exception as exc:
             logger.exception(f"[process_meeting] FAILED  meeting={meeting_id}")

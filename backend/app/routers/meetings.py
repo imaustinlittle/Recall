@@ -103,7 +103,7 @@ async def trigger_summarize(
         raise HTTPException(status_code=422, detail="Meeting has no transcript to summarize")
 
     from app.workers.tasks import summarize_meeting
-    summarize_meeting.delay(str(meeting_id))
+    summarize_meeting.apply_async(args=[str(meeting_id)], queue="default")
     return {"status": "queued"}
 
 
