@@ -1,7 +1,8 @@
 import uuid
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, cast, Date
 
 from app.database import get_async_db
 from app.deps import get_current_user
@@ -16,12 +17,18 @@ async def list_meetings(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     status: models.MeetingStatus | None = None,
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
     db: AsyncSession = Depends(get_async_db),
     current_user: models.User = Depends(get_current_user),
 ):
     q = select(models.Meeting).where(models.Meeting.user_id == current_user.id)
     if status:
         q = q.where(models.Meeting.status == status)
+    if date_from:
+        q = q.where(cast(models.Meeting.created_at, Date) >= date_from)
+    if date_to:
+        q = q.where(cast(models.Meeting.created_at, Date) <= date_to)
     q = q.order_by(models.Meeting.created_at.desc())
 
     total_result = await db.execute(

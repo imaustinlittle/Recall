@@ -77,11 +77,13 @@ export const auth = {
 
 // ── Meetings ───────────────────────────────────────────────────────────────
 export const meetings = {
-  list: (params?: { page?: number; limit?: number; status?: string }) => {
+  list: (params?: { page?: number; limit?: number; status?: string; date_from?: string; date_to?: string }) => {
     const q = new URLSearchParams();
-    if (params?.page)   q.set("page", String(params.page));
-    if (params?.limit)  q.set("limit", String(params.limit));
-    if (params?.status) q.set("status", params.status);
+    if (params?.page)      q.set("page", String(params.page));
+    if (params?.limit)     q.set("limit", String(params.limit));
+    if (params?.status)    q.set("status", params.status);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to)   q.set("date_to", params.date_to);
     return request(`/meetings?${q}`);
   },
 

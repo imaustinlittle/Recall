@@ -34,7 +34,9 @@
       "Bash(ssh root@10.0.30.50 \"docker logs recall-api-1 --tail 10 2>&1\")",
       "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli keys '*' | grep -v binding | grep -v meta | grep -v pidbox\")",
       "Bash(ssh root@10.0.30.50 \"docker exec recall-api-1 python -c \\\\\"from app.workers.tasks import summarize_meeting; print\\(summarize_meeting.queue\\)\\\\\"\")",
-      "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli lindex celery 0 2>&1 | python3 -c \\\\\"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(d.get\\('properties',{}\\).get\\('delivery_info',{}\\)\\)\\\\\"\")"
+      "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli lindex celery 0 2>&1 | python3 -c \\\\\"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(d.get\\('properties',{}\\).get\\('delivery_info',{}\\)\\)\\\\\"\")",
+      "Bash(ssh root@10.0.30.50 \"docker ps --filter name=recall --format 'table {{.Names}}\\\\t{{.Status}}\\\\t{{.Image}}' 2>&1\")",
+      "Bash(ssh root@10.0.30.50 \"docker logs recall-worker-1 2>&1\")"
     ]
   }
 }
