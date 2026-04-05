@@ -1,17 +1,20 @@
 import uuid
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select
 
 from app.database import get_async_db
 from app.deps import get_current_user
 from app import models
+from app.limiter import limiter
 
 router = APIRouter()
 
 
 @router.get("/search")
+@limiter.limit("30/minute")
 async def search(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=200),
     limit: int = Query(30, ge=1, le=100),
     db: AsyncSession = Depends(get_async_db),

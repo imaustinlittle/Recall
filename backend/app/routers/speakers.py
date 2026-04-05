@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 
@@ -7,12 +7,15 @@ from app.database import get_async_db
 from app.deps import get_current_user
 from app import models
 from app.schemas.transcript import SpeakerOut, SpeakerUpdate, SpeakerMerge
+from app.limiter import limiter
 
 router = APIRouter()
 
 
 @router.get("/speakers")
+@limiter.limit("60/minute")
 async def list_all_speakers(
+    request: Request,
     db: AsyncSession = Depends(get_async_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -44,8 +47,10 @@ async def list_all_speakers(
 
 
 @router.get("/speakers/{name}/meetings")
+@limiter.limit("60/minute")
 async def meetings_for_speaker(
-    name: str,
+    request: Request,
+    name: str = Path(..., max_length=120),
     db: AsyncSession = Depends(get_async_db),
     current_user: models.User = Depends(get_current_user),
 ):

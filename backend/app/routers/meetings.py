@@ -125,11 +125,14 @@ async def import_notes_from_summary(
             body = line.lstrip("-•* ").strip()
             if not body or body.lower() in ("none identified", "none", "n/a"):
                 continue
+            note_type = models.NoteType[current_section]
             db.add(models.Note(
                 meeting_id=meeting_id,
                 user_id=current_user.id,
-                note_type=models.NoteType[current_section],
+                note_type=note_type,
                 body=body,
+                is_action_item=note_type == models.NoteType.action_item,
+                is_decision=note_type == models.NoteType.decision,
             ))
             created += 1
 
