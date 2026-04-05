@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/useAuth";
@@ -16,21 +16,19 @@ function monthEnd(year: number, month: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
 }
 
-export function Sidebar() {
-  const pathname = usePathname();
+/** Inner component that uses useSearchParams — must be wrapped in Suspense */
+function CalendarSection({ user }: { user: { email: string } | null }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const pathname = usePathname();
 
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [monthDates, setMonthDates] = useState<string[]>([]);
 
-  // Selected date comes from the URL so it stays in sync with the dashboard
   const selectedDate = searchParams.get("date");
 
-  // Fetch meeting dates for the visible calendar month
   useEffect(() => {
     if (!user) return;
     meetingsApi
@@ -45,19 +43,32 @@ export function Sidebar() {
   const activeDates = useMemo(() => new Set(monthDates), [monthDates]);
 
   const handleDateSelect = (date: string | null) => {
-    if (date) {
-      router.push(`/?date=${date}`);
-    } else {
-      router.push("/");
-    }
+    if (date) router.push(`/?date=${date}`);
+    else router.push("/");
   };
 
   const handleMonthChange = (year: number, month: number) => {
     setCalYear(year);
     setCalMonth(month);
-    // Clear date filter when navigating months
     if (pathname === "/") router.push("/");
   };
+
+  return (
+    <MiniCalendar
+      year={calYear}
+      month={calMonth}
+      activeDates={activeDates}
+      selectedDate={selectedDate}
+      onDateSelect={handleDateSelect}
+      onMonthChange={handleMonthChange}
+      dark
+    />
+  );
+}
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
     <aside className="w-64 shrink-0 flex flex-col bg-gray-900 text-gray-100 h-full overflow-y-auto">
@@ -73,17 +84,11 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Calendar — always visible */}
+      {/* Calendar — always visible, Suspense required for useSearchParams */}
       <div className="px-4 py-2">
-        <MiniCalendar
-          year={calYear}
-          month={calMonth}
-          activeDates={activeDates}
-          selectedDate={selectedDate}
-          onDateSelect={handleDateSelect}
-          onMonthChange={handleMonthChange}
-          dark
-        />
+        <Suspense fallback={<div className="h-48" />}>
+          <CalendarSection user={user} />
+        </Suspense>
       </div>
 
       {/* Divider */}
