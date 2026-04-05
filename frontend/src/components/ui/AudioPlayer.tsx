@@ -7,11 +7,13 @@ interface Props {
   src: string;
   audioRef: React.RefObject<HTMLAudioElement>;
   onTimeUpdate: (t: number) => void;
+  /** Extra Tailwind classes on the fixed bar — use to set left offset when a sidebar is present, e.g. "left-64" */
+  barClassName?: string;
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 
-export function AudioPlayer({ src, audioRef, onTimeUpdate }: Props) {
+export function AudioPlayer({ src, audioRef, onTimeUpdate, barClassName = "left-0" }: Props) {
   const [playing, setPlaying]   = useState(false);
   const [current, setCurrent]   = useState(0);
   const [duration, setDuration] = useState(0);
@@ -99,7 +101,7 @@ export function AudioPlayer({ src, audioRef, onTimeUpdate }: Props) {
       />
 
       {/* Sticky bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-lg px-6 py-3">
+      <div className={`fixed bottom-0 right-0 z-50 bg-white border-t border-gray-200 shadow-lg px-6 py-3 ${barClassName}`}>
         <div className="max-w-4xl mx-auto flex items-center gap-4">
 
           {/* Skip back */}

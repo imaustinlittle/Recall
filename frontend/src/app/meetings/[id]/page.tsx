@@ -23,6 +23,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { NotesPanel } from "@/components/notes/NotesPanel";
 import { SummaryPanel, SummaryPending } from "@/components/summary/SummaryPanel";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { formatDate } from "@/lib/utils";
 
 const EXPORT_FORMATS = [
@@ -231,7 +232,7 @@ export default function MeetingPage() {
 
   if (authLoading || !user || !meeting) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Spinner size="lg" />
       </div>
     );
@@ -241,137 +242,150 @@ export default function MeetingPage() {
   const hasTranscript = segments.length > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top bar */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
-        <button
-          onClick={() => router.push("/")}
-          className="text-gray-400 hover:text-gray-600 text-sm"
-        >
-          ← Back
-        </button>
-        <div className="flex-1 min-w-0">
-          <EditableTitle
-            value={meeting.title}
-            onSave={(title) => {
-              meetingsApi.update(id, { title });
-              setMeeting((m) => m ? { ...m, title } : m);
-            }}
-          />
-          <p className="text-xs text-gray-400 mt-0.5">{formatDate(meeting.created_at)}</p>
-        </div>
-        <StatusBadge status={meeting.status} />
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      <Sidebar />
 
-        {hasTranscript && (
-          <div className="relative" ref={exportMenuRef}>
-            <button
-              onClick={() => setExportOpen((o) => !o)}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              Export
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {exportOpen && (
-              <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
-                {EXPORT_FORMATS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => { exportTranscript(id, key); setExportOpen(false); }}
-                    className="w-full text-left text-sm px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    {label}
-                  </button>
-                ))}
+      {/* Right pane */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top bar */}
+        <header className="shrink-0 bg-white border-b border-gray-100 px-6 py-3.5 flex items-center gap-4">
+          <button
+            onClick={() => router.push("/")}
+            className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm transition-colors shrink-0"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+            Back
+          </button>
+
+          <div className="flex-1 min-w-0">
+            <EditableTitle
+              value={meeting.title}
+              onSave={(title) => {
+                meetingsApi.update(id, { title });
+                setMeeting((m) => m ? { ...m, title } : m);
+              }}
+            />
+            <p className="text-xs text-gray-400 mt-0.5">{formatDate(meeting.created_at)}</p>
+          </div>
+
+          <StatusBadge status={meeting.status} />
+
+          {hasTranscript && (
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                onClick={() => setExportOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              >
+                Export
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {exportOpen && (
+                <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+                  {EXPORT_FORMATS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => { exportTranscript(id, key); setExportOpen(false); }}
+                      className="w-full text-left text-sm px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </header>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <main className="max-w-4xl mx-auto px-6 py-8 pb-40 space-y-6">
+            {(isProcessing || job) && <JobProgressBar job={job} />}
+
+            {!hasTranscript && !isProcessing && (
+              <div className="space-y-3">
+                <RecordingPanel meetingId={id} onUploaded={handleUploaded} />
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <div className="flex-1 border-t border-gray-200" />
+                  <span>or upload an existing file</span>
+                  <div className="flex-1 border-t border-gray-200" />
+                </div>
+                <DropZone meetingId={id} onUploaded={handleUploaded} />
               </div>
             )}
-          </div>
-        )}
-      </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8 pb-40 space-y-6">
-        {(isProcessing || job) && <JobProgressBar job={job} />}
+            {hasTranscript && (
+              <TranscriptViewer
+                ref={transcriptRef}
+                segments={segments}
+                speakers={speakers}
+                meetingId={id}
+                currentTime={currentTime}
+                onSeek={seek}
+                onSegmentUpdate={handleSegmentUpdate}
+                onSpeakerRename={handleSpeakerRename}
+                onAddNote={handleAddNoteFromTranscript}
+              />
+            )}
 
-        {!hasTranscript && !isProcessing && (
-          <div className="space-y-3">
-            <RecordingPanel meetingId={id} onUploaded={handleUploaded} />
-            <div className="flex items-center gap-3 text-xs text-gray-400">
-              <div className="flex-1 border-t border-gray-200" />
-              <span>or upload an existing file</span>
-              <div className="flex-1 border-t border-gray-200" />
+            {isProcessing && !job && (
+              <div className="text-center py-16 text-gray-400 text-sm">
+                Processing your recording…
+              </div>
+            )}
+
+            {hasTranscript && meeting.summary && (
+              <SummaryPanel
+                summary={meeting.summary}
+                onRegenerate={async () => {
+                  await meetingsApi.summarize(id);
+                  setMeeting((m) => m ? { ...m, summary: null } : m);
+                }}
+              />
+            )}
+            {hasTranscript && !meeting.summary && meeting.status === "transcribed" && (
+              <SummaryPending
+                onGenerate={async () => {
+                  await meetingsApi.summarize(id);
+                }}
+              />
+            )}
+
+            <NotesPanel
+              notes={notesList}
+              currentTime={currentTime}
+              onSeek={audioSrc ? seek : undefined}
+              onAdd={handleAddNote}
+              onUpdate={handleUpdateNote}
+              onDelete={handleDeleteNote}
+            />
+          </main>
+        </div>
+
+        {/* Fixed audio player + shortcut bar — offset by sidebar width */}
+        {hasTranscript && audioSrc && (
+          <>
+            <div className="fixed bottom-20 left-64 right-0 z-20 pointer-events-none flex justify-center">
+              <div className="flex items-center gap-4 bg-gray-900/80 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full shadow-lg">
+                <Key k="A" label="← 10s" />
+                <Key k="S" label="play/pause" />
+                <Key k="D" label="+ note" />
+                <Key k="F" label="10s →" />
+                <Key k="Q" label="rename speaker" />
+              </div>
             </div>
-            <DropZone meetingId={id} onUploaded={handleUploaded} />
-          </div>
+            <AudioPlayer
+              src={audioSrc}
+              audioRef={audioRef}
+              onTimeUpdate={setCurrentTime}
+              barClassName="left-64"
+            />
+          </>
         )}
-
-        {hasTranscript && (
-          <TranscriptViewer
-            ref={transcriptRef}
-            segments={segments}
-            speakers={speakers}
-            meetingId={id}
-            currentTime={currentTime}
-            onSeek={seek}
-            onSegmentUpdate={handleSegmentUpdate}
-            onSpeakerRename={handleSpeakerRename}
-            onAddNote={handleAddNoteFromTranscript}
-          />
-        )}
-
-        {isProcessing && !job && (
-          <div className="text-center py-16 text-gray-400 text-sm">
-            Processing your recording…
-          </div>
-        )}
-
-        {/* Summary */}
-        {hasTranscript && meeting.summary && (
-          <SummaryPanel
-            summary={meeting.summary}
-            onRegenerate={async () => {
-              await meetingsApi.summarize(id);
-              setMeeting((m) => m ? { ...m, summary: null } : m);
-            }}
-          />
-        )}
-        {hasTranscript && !meeting.summary && meeting.status === "transcribed" && (
-          <SummaryPending
-            onGenerate={async () => {
-              await meetingsApi.summarize(id);
-            }}
-          />
-        )}
-
-        <NotesPanel
-          notes={notesList}
-          currentTime={currentTime}
-          onSeek={audioSrc ? seek : undefined}
-          onAdd={handleAddNote}
-          onUpdate={handleUpdateNote}
-          onDelete={handleDeleteNote}
-        />
-      </main>
-
-      {hasTranscript && audioSrc && (
-        <>
-          {/* Keyboard shortcut hint bar */}
-          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-            <div className="flex items-center gap-4 bg-gray-900/80 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full shadow-lg">
-              <Key k="A" label="← 10s" />
-              <Key k="S" label="play/pause" />
-              <Key k="D" label="+ note" />
-              <Key k="F" label="10s →" />
-              <Key k="Q" label="rename speaker" />
-            </div>
-          </div>
-          <AudioPlayer
-            src={audioSrc}
-            audioRef={audioRef}
-            onTimeUpdate={setCurrentTime}
-          />
-        </>
-      )}
+      </div>
     </div>
   );
 }
