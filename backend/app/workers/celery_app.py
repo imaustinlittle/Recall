@@ -33,6 +33,7 @@ celery_app.conf.update(
     # Routing
     task_routes={
         "app.workers.tasks.process_meeting": {"queue": "transcription"},
+        "app.workers.tasks.summarize_meeting": {"queue": "default"},
     },
 
     # Timeouts — large files with diarization can take several hours

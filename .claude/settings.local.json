@@ -11,7 +11,19 @@
       "Bash(git -C \"c:\\\\Users\\\\imaus\\\\OneDrive\\\\Documents 1\\\\git\\\\Recall\" ls-files .env)",
       "Bash(python3 -c \"import secrets; print\\('SECRET_KEY=' + secrets.token_hex\\(32\\)\\); print\\('POSTGRES_PASSWORD=' + secrets.token_urlsafe\\(24\\)\\)\")",
       "Bash(docker volume:*)",
-      "Bash(ssh -o StrictHostKeyChecking=no root@10.0.30.50 \"uname -a && echo 'SSH OK'\")"
+      "Bash(ssh -o StrictHostKeyChecking=no root@10.0.30.50 \"uname -a && echo 'SSH OK'\")",
+      "Bash(ssh root@10.0.30.50 \"docker logs recall-worker-1 --tail 50 2>&1\")",
+      "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli llen default && docker exec recall-redis-1 redis-cli llen transcription\")",
+      "Bash(ssh root@10.0.30.50 \"docker ps --filter name=ollama --format '{{.Names}} {{.Status}}'\")",
+      "Bash(ssh root@10.0.30.50 \"docker exec recall_ollama ollama list\")",
+      "Bash(ssh root@10.0.30.50 \"docker logs recall-worker-1 --tail 30 2>&1\")",
+      "Bash(ssh root@10.0.30.50 \"docker logs recall-api-1 --tail 30 2>&1\")",
+      "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli keys 'celery*' && docker exec recall-redis-1 redis-cli keys '_kombu*'\")",
+      "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli llen celery\")",
+      "Bash(ssh root@10.0.30.50 \"docker restart recall-worker-1\")",
+      "Bash(ssh root@10.0.30.50 \"cd /tmp && docker inspect recall-worker-1 --format '{{.HostConfig.NetworkMode}}' 2>&1\")",
+      "Bash(ssh root@10.0.30.50 \"docker logs recall-worker-1 --tail 10 2>&1\")",
+      "Bash(ssh root@10.0.30.50 \"docker exec recall-redis-1 redis-cli del celery\")"
     ]
   }
 }
