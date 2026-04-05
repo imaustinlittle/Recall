@@ -99,6 +99,12 @@ export function Sidebar() {
         <NavItem href="/" active={pathname === "/"} icon={<MeetingsIcon />}>
           Meetings
         </NavItem>
+        <NavItem href="/search" active={pathname === "/search"} icon={<SearchIcon />}>
+          Search
+        </NavItem>
+        <NavItem href="/speakers" active={pathname === "/speakers"} icon={<SpeakersIcon />}>
+          Speakers
+        </NavItem>
         <NavItem href="/admin" active={pathname === "/admin"} icon={<SettingsIcon />}>
           Settings
         </NavItem>
@@ -142,6 +148,22 @@ function NavItem({
       <span className="w-4 h-4 shrink-0">{icon}</span>
       {children}
     </Link>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function SpeakersIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+    </svg>
   );
 }
 

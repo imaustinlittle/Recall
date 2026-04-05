@@ -99,6 +99,9 @@ export const meetings = {
 
   summarize: (id: string) =>
     request(`/meetings/${id}/summarize`, { method: "POST" }),
+
+  importNotesFromSummary: (id: string) =>
+    request(`/meetings/${id}/notes/from-summary`, { method: "POST" }),
 };
 
 // ── Media ──────────────────────────────────────────────────────────────────
@@ -253,3 +256,17 @@ export const adminApi = {
       body: JSON.stringify(body),
     }),
 };
+
+// ── Search ─────────────────────────────────────────────────────────────────
+export const searchApi = {
+  search: (q: string, limit = 30) =>
+    request(`/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+};
+
+// ── Global speakers ────────────────────────────────────────────────────────
+export const speakersApi = {
+  listAll: () => request("/speakers"),
+  meetingsForSpeaker: (name: string) =>
+    request(`/speakers/${encodeURIComponent(name)}/meetings`),
+};
+

@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 
 from app.database import get_async_db
 from app.deps import get_current_user
@@ -9,6 +9,67 @@ from app import models
 from app.schemas.transcript import SpeakerOut, SpeakerUpdate, SpeakerMerge
 
 router = APIRouter()
+
+
+@router.get("/speakers")
+async def list_all_speakers(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Return all distinct speaker names the user has assigned across all meetings,
+    with meeting count and latest meeting date.
+    """
+    result = await db.execute(
+        select(
+            func.coalesce(models.Speaker.display_name, models.Speaker.label).label("name"),
+            func.count(models.Speaker.id.distinct()).label("speaker_count"),
+            func.count(models.Meeting.id.distinct()).label("meeting_count"),
+            func.max(models.Meeting.created_at).label("last_seen"),
+        )
+        .join(models.Meeting, models.Speaker.meeting_id == models.Meeting.id)
+        .where(models.Meeting.user_id == current_user.id)
+        .group_by(func.coalesce(models.Speaker.display_name, models.Speaker.label))
+        .order_by(func.count(models.Meeting.id.distinct()).desc())
+    )
+    rows = result.all()
+    return [
+        {
+            "name": r.name,
+            "meeting_count": r.meeting_count,
+            "last_seen": r.last_seen.isoformat() if r.last_seen else None,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/speakers/{name}/meetings")
+async def meetings_for_speaker(
+    name: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return all meetings that have a speaker with the given display name."""
+    result = await db.execute(
+        select(models.Meeting)
+        .join(models.Speaker, models.Speaker.meeting_id == models.Meeting.id)
+        .where(models.Meeting.user_id == current_user.id)
+        .where(
+            func.coalesce(models.Speaker.display_name, models.Speaker.label) == name
+        )
+        .order_by(models.Meeting.created_at.desc())
+        .distinct()
+    )
+    meetings = result.scalars().all()
+    return [
+        {
+            "id": str(m.id),
+            "title": m.title,
+            "status": m.status.value,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in meetings
+    ]
 
 
 @router.get("/meetings/{meeting_id}/speakers", response_model=list[SpeakerOut])

@@ -344,6 +344,12 @@ export default function MeetingPage() {
                   await meetingsApi.summarize(id);
                   setMeeting((m) => m ? { ...m, summary: null } : m);
                 }}
+                onImportNotes={async () => {
+                  const res = await meetingsApi.importNotesFromSummary(id) as { created: number };
+                  const freshNotes = await notesApi.list(id) as Note[];
+                  setNotesList(freshNotes);
+                  return res.created;
+                }}
               />
             )}
             {hasTranscript && !meeting.summary && meeting.status === "transcribed" && (

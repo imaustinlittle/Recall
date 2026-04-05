@@ -62,19 +62,32 @@ function inlineBold(text: string): React.ReactNode {
 export function SummaryPanel({
   summary,
   onRegenerate,
+  onImportNotes,
 }: {
   summary: string;
   onRegenerate: () => Promise<void>;
+  onImportNotes?: () => Promise<number>;
 }) {
   const [regenerating, setRegenerate] = useState(false);
-  const [done, setDone] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
 
   const handleRegenerate = async () => {
     setRegenerate(true);
     await onRegenerate();
     setRegenerate(false);
-    setDone(true);
-    setTimeout(() => setDone(false), 3000);
+  };
+
+  const handleImport = async () => {
+    if (!onImportNotes) return;
+    setImporting(true);
+    try {
+      const count = await onImportNotes();
+      setImportResult(count > 0 ? `${count} note${count !== 1 ? "s" : ""} added` : "Nothing new to import");
+      setTimeout(() => setImportResult(null), 4000);
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -85,14 +98,26 @@ export function SummaryPanel({
           <h2 className="text-sm font-semibold text-gray-900">Summary</h2>
           <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">AI generated</span>
         </div>
-        <button
-          onClick={handleRegenerate}
-          disabled={regenerating}
-          className="text-xs text-gray-400 hover:text-brand-600 disabled:opacity-50 transition-colors flex items-center gap-1"
-          title="Re-generate summary (useful after renaming speakers)"
-        >
-          {regenerating ? "Queued…" : done ? "✓ Queued" : "↺ Regenerate"}
-        </button>
+        <div className="flex items-center gap-3">
+          {onImportNotes && (
+            <button
+              onClick={handleImport}
+              disabled={importing}
+              className="text-xs text-brand-600 hover:text-brand-700 disabled:opacity-50 transition-colors font-medium"
+              title="Create notes from action items and decisions in this summary"
+            >
+              {importing ? "Importing…" : importResult ?? "↓ Import to Notes"}
+            </button>
+          )}
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="text-xs text-gray-400 hover:text-brand-600 disabled:opacity-50 transition-colors"
+            title="Re-generate summary (useful after renaming speakers)"
+          >
+            {regenerating ? "Queued…" : "↺ Regenerate"}
+          </button>
+        </div>
       </div>
       <div className="px-4 py-3 space-y-0.5">
         {renderSummary(summary)}

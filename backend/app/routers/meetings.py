@@ -91,6 +91,52 @@ async def delete_meeting(
     await db.commit()
 
 
+@router.post("/{meeting_id}/notes/from-summary", status_code=201)
+async def import_notes_from_summary(
+    meeting_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Parse the AI summary and create Note rows for action items and decisions."""
+    meeting = await _get_owned_meeting(db, meeting_id, current_user.id)
+    if not meeting.summary:
+        raise HTTPException(status_code=422, detail="Meeting has no summary to import from")
+
+    created = 0
+    current_section: str | None = None
+
+    for raw_line in meeting.summary.splitlines():
+        line = raw_line.strip()
+        lower = line.lower()
+
+        # Detect section headings
+        if "action item" in lower:
+            current_section = "action_item"
+            continue
+        if "key decision" in lower or "decisions" in lower:
+            current_section = "decision"
+            continue
+        if lower.startswith("1.") or lower.startswith("**overview"):
+            current_section = None
+            continue
+
+        # Bullet lines
+        if current_section and (line.startswith("-") or line.startswith("•") or line.startswith("*")):
+            body = line.lstrip("-•* ").strip()
+            if not body or body.lower() in ("none identified", "none", "n/a"):
+                continue
+            db.add(models.Note(
+                meeting_id=meeting_id,
+                user_id=current_user.id,
+                note_type=models.NoteType[current_section],
+                body=body,
+            ))
+            created += 1
+
+    await db.commit()
+    return {"created": created}
+
+
 @router.post("/{meeting_id}/summarize")
 async def trigger_summarize(
     meeting_id: uuid.UUID,
