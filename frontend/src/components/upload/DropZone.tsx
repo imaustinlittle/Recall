@@ -4,6 +4,7 @@ import { useCallback, useState, useRef } from "react";
 import { uploadMedia } from "@/lib/api";
 import { Job } from "@/lib/types";
 import { Spinner } from "@/components/ui/Spinner";
+import { UploadIcon } from "@/components/ui/icons";
 
 interface Props {
   meetingId: string;
@@ -23,9 +24,7 @@ export function DropZone({ meetingId, onUploaded }: Props) {
       setError(null);
       setProgress(0);
       try {
-        const job = await uploadMedia(meetingId, file, (pct) =>
-          setProgress(pct)
-        );
+        const job = await uploadMedia(meetingId, file, (pct) => setProgress(pct));
         onUploaded(job as Job);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Upload failed");
@@ -58,52 +57,43 @@ export function DropZone({ meetingId, onUploaded }: Props) {
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onClick={() => !isUploading && inputRef.current?.click()}
-      className={`
-        relative border-2 border-dashed rounded-2xl p-16 text-center transition-all
-        ${isUploading ? "cursor-default" : "cursor-pointer"}
-        ${dragging
-          ? "border-brand-500 bg-brand-50"
-          : "border-gray-300 hover:border-gray-400 bg-white"}
-      `}
+      className={[
+        "flex flex-col items-center gap-2.5 rounded-[18px] border-2 border-dashed bg-surface-2 px-6 py-[46px] text-center transition-colors",
+        isUploading ? "cursor-default" : "cursor-pointer",
+        dragging ? "border-accent" : "border-line-strong hover:border-accent",
+      ].join(" ")}
     >
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPTED}
-        className="hidden"
-        onChange={onFileChange}
-      />
+      <input ref={inputRef} type="file" accept={ACCEPTED} className="hidden" onChange={onFileChange} />
 
       {isUploading ? (
-        <div className="space-y-4">
+        <div className="flex w-full flex-col items-center gap-4">
           <Spinner size="lg" />
-          <p className="text-sm text-gray-500">
-            Uploading… {Math.round((progress ?? 0) * 100)}%
-          </p>
-          <div className="w-64 mx-auto bg-gray-200 rounded-full h-1.5">
+          <p className="text-sm text-ink-2">Uploading… {Math.round((progress ?? 0) * 100)}%</p>
+          <div className="h-1.5 w-64 overflow-hidden rounded-full bg-inset">
             <div
-              className="bg-brand-500 h-1.5 rounded-full transition-all duration-200"
+              className="h-full rounded-full bg-accent transition-[width] duration-200"
               style={{ width: `${(progress ?? 0) * 100}%` }}
             />
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="text-4xl">🎙️</div>
-          <p className="text-base font-medium text-gray-700">
-            Drop your recording here
+        <>
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-[14px] border border-line bg-surface text-ink-2">
+            <UploadIcon size={22} />
+          </div>
+          <p className="text-[15px] font-semibold text-ink">Drop your recording here</p>
+          <p className="text-[13px] text-ink-2">or click to browse</p>
+          <p className="mt-0.5 font-mono text-[11px] text-ink-3">
+            mp3 · wav · m4a · mp4 · mov · webm · flac — up to 2&nbsp;GB
           </p>
-          <p className="text-sm text-gray-400">
-            or click to browse
-          </p>
-          <p className="text-xs text-gray-300 mt-2">
-            mp3 · wav · m4a · mp4 · mov · webm · ogg · flac — up to 2 GB
-          </p>
-        </div>
+        </>
       )}
 
       {error && (
-        <p className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+        <p
+          className="mt-2 rounded-[10px] px-3 py-2 text-sm"
+          style={{ background: "color-mix(in srgb, #E0533A 10%, transparent)", color: "#E0533A" }}
+        >
           {error}
         </p>
       )}

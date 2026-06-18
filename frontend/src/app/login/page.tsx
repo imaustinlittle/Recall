@@ -4,11 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth, setup } from "@/lib/api";
 import { Spinner } from "@/components/ui/Spinner";
+import { Logo } from "@/components/layout/Logo";
+import { useTheme } from "@/lib/useTheme";
+import { MoonIcon, SunIcon } from "@/components/ui/icons";
+import { bars } from "@/lib/waveform";
 
 type Screen = "loading" | "setup" | "login";
 
+const HERO_BARS = bars(42, 60, 18);
+
 export default function LoginPage() {
   const router = useRouter();
+  const { theme, toggle } = useTheme();
   const [screen, setScreen] = useState<Screen>("loading");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +24,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setup.status()
+    setup
+      .status()
       .then(({ needs_setup }) => setScreen(needs_setup ? "setup" : "login"))
       .catch(() => setScreen("login"));
   }, []);
@@ -41,79 +49,134 @@ export default function LoginPage() {
 
   if (screen === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
+  const inputClasses =
+    "w-full rounded-[11px] border border-line bg-inset px-[14px] py-[12px] text-[14.5px] text-ink outline-none transition-shadow focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-weak)]";
+  const labelClasses =
+    "font-mono text-[12.5px] font-semibold tracking-[.02em] text-ink-2";
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-brand-600">Recall</h1>
-          <p className="text-sm text-gray-500 mt-1">Record, transcribe, and recall your meetings.</p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+      {/* Hero waveform backdrop */}
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center gap-[3px] px-[6%] opacity-50"
+        aria-hidden="true"
+      >
+        {HERO_BARS.map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-[3px] bg-wave"
+            style={{ height: `${h}%` }}
+          />
+        ))}
+      </div>
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 50% 8%, transparent, var(--bg) 62%)",
+        }}
+      />
+
+      {/* Theme toggle */}
+      <button
+        onClick={toggle}
+        className="absolute right-[22px] top-[22px] z-10 inline-flex items-center gap-[7px] rounded-full border border-line bg-surface px-3 py-2 text-[12px] font-semibold text-ink-2 shadow-card-sm"
+      >
+        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        <span>{theme === "dark" ? "Light" : "Dark"}</span>
+      </button>
+
+      <div className="relative z-[2] w-full max-w-[392px]">
+        <div className="mb-[26px] flex flex-col items-center gap-[14px]">
+          <Logo size={30} markHeight={30} barWidth={4} />
+          <p className="text-center text-[14.5px] text-ink-2">
+            Record, transcribe, and recall your meetings.
+          </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
+        <div className="rounded-[20px] border border-line bg-surface p-[30px] shadow-card">
           {screen === "setup" && (
-            <div className="mb-6">
-              <h2 className="text-base font-semibold text-gray-800">Welcome! Set up your account</h2>
-              <p className="text-sm text-gray-500 mt-1">Create the admin account to get started.</p>
+            <div className="mb-5">
+              <h2 className="font-display text-base font-bold text-ink">
+                Welcome — set up your account
+              </h2>
+              <p className="mt-1 text-[13.5px] text-ink-2">
+                Create the admin account to get started.
+              </p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {screen === "setup" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <div className="flex flex-col gap-[5px]">
+                <label className={labelClasses}>Name</label>
                 <input
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className={inputClasses}
                   placeholder="Your name"
                 />
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+
+            <div className="flex flex-col gap-[5px]">
+              <label className={labelClasses}>Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                placeholder="you@example.com"
+                className={inputClasses}
+                placeholder="ops@homelab.dev"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+
+            <div className="flex flex-col gap-[5px]">
+              <label className={labelClasses}>Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={inputClasses}
                 placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+              <p
+                className="rounded-[10px] px-3 py-2 text-[13px] font-medium"
+                style={{
+                  background: "color-mix(in srgb, #E0533A 12%, transparent)",
+                  color: "#E0533A",
+                }}
+              >
+                {error}
+              </p>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 rounded-lg text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-[11px] bg-accent px-3 py-[13px] text-[14.5px] font-bold text-on-accent shadow-glow transition-opacity disabled:opacity-60"
             >
-              {loading && <Spinner size="sm" />}
+              {loading && <Spinner size="sm" className="border-on-accent/40 border-t-on-accent" />}
               {screen === "setup" ? "Create account" : "Sign in"}
             </button>
           </form>
         </div>
+
+        <p className="mt-[18px] text-center font-mono text-[12px] tracking-[.04em] text-ink-3">
+          SELF-HOSTED · v1.0 · localhost:3000
+        </p>
       </div>
     </div>
   );

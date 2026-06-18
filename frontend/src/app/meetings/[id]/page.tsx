@@ -18,20 +18,21 @@ import { DropZone } from "@/components/upload/DropZone";
 import { RecordingPanel } from "@/components/recording/RecordingPanel";
 import { TranscriptViewer, TranscriptViewerHandle } from "@/components/transcript/TranscriptViewer";
 import { JobProgressBar } from "@/components/ui/JobProgressBar";
-import { AudioPlayer } from "@/components/ui/AudioPlayer";
+import { WaveformPlayer } from "@/components/ui/WaveformPlayer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { NotesPanel } from "@/components/notes/NotesPanel";
 import { SummaryPanel, SummaryPending } from "@/components/summary/SummaryPanel";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { BackIcon, ChevronIcon, DownloadIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
 
 const EXPORT_FORMATS = [
   { key: "txt", label: "Plain Text (.txt)" },
-  { key: "md",  label: "Markdown (.md)"   },
+  { key: "md", label: "Markdown (.md)" },
   { key: "srt", label: "Subtitles (.srt)" },
-  { key: "vtt", label: "WebVTT (.vtt)"    },
-  { key: "pdf", label: "PDF (.pdf)"       },
+  { key: "vtt", label: "WebVTT (.vtt)" },
+  { key: "pdf", label: "PDF (.pdf)" },
 ] as const;
 
 export default function MeetingPage() {
@@ -73,9 +74,7 @@ export default function MeetingPage() {
       loadTranscript();
       if (!searchParams.get("job")) {
         jobsApi.list(id).then((list: any) => {
-          const active = list?.find((j: any) =>
-            j.status === "processing" || j.status === "queued"
-          );
+          const active = list?.find((j: any) => j.status === "processing" || j.status === "queued");
           if (active) setActiveJobId(active.id);
         });
       }
@@ -86,7 +85,7 @@ export default function MeetingPage() {
   useEffect(() => {
     if (!meeting || meeting.summary || meeting.status !== "transcribed") return;
     const interval = setInterval(async () => {
-      const updated = await meetingsApi.get(id) as Meeting;
+      const updated = (await meetingsApi.get(id)) as Meeting;
       if (updated.summary) {
         setMeeting(updated);
         clearInterval(interval);
@@ -109,7 +108,6 @@ export default function MeetingPage() {
   useEffect(() => {
     if (!audioSrc) return;
     const handler = (e: KeyboardEvent) => {
-      // Don't fire while the user is typing in any input
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const el = audioRef.current;
@@ -164,18 +162,10 @@ export default function MeetingPage() {
     }
   }, [id]);
 
-  // ── Note CRUD (lifted so both TranscriptViewer and NotesPanel share state) ──
+  // ── Note CRUD ──────────────────────────────────────────────────────────────
 
-  const handleAddNote = useCallback(async (
-    body: string,
-    type: NoteType,
-    timestampRef: number | null
-  ) => {
-    const created = (await notesApi.create(id, {
-      note_type: type,
-      body,
-      timestamp_ref: timestampRef,
-    })) as Note;
+  const handleAddNote = useCallback(async (body: string, type: NoteType, timestampRef: number | null) => {
+    const created = (await notesApi.create(id, { note_type: type, body, timestamp_ref: timestampRef })) as Note;
     setNotesList((prev) => [...prev, created]);
   }, [id]);
 
@@ -189,13 +179,7 @@ export default function MeetingPage() {
     setNotesList((prev) => prev.filter((n) => n.id !== noteId));
   }, [id]);
 
-  // ── Called from TranscriptViewer's inline note form ──────────────────────
-
-  const handleAddNoteFromTranscript = useCallback(async (
-    timestamp: number,
-    body: string,
-    type: NoteType
-  ) => {
+  const handleAddNoteFromTranscript = useCallback(async (timestamp: number, body: string, type: NoteType) => {
     await handleAddNote(body, type, timestamp);
   }, [handleAddNote]);
 
@@ -203,7 +187,7 @@ export default function MeetingPage() {
 
   const handleUploaded = (newJob: Job) => {
     setActiveJobId(newJob.id);
-    setMeeting((m) => m ? { ...m, status: "queued" } : m);
+    setMeeting((m) => (m ? { ...m, status: "queued" } : m));
   };
 
   const handleSegmentUpdate = async (segmentId: string, content: string) => {
@@ -216,9 +200,7 @@ export default function MeetingPage() {
     setSpeakers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
     setSegments((prev) =>
       prev.map((seg) =>
-        seg.speaker_id === speakerId
-          ? { ...seg, speaker: { ...seg.speaker!, display_name } }
-          : seg
+        seg.speaker_id === speakerId ? { ...seg, speaker: { ...seg.speaker!, display_name } } : seg
       )
     );
   };
@@ -232,64 +214,57 @@ export default function MeetingPage() {
 
   if (authLoading || !user || !meeting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
-  const isProcessing = ["queued", "processing"].includes(meeting.status);
+  const isProcessing = ["queued", "processing", "uploading"].includes(meeting.status);
   const hasTranscript = segments.length > 0;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar />
+    <div className="flex min-h-screen flex-col">
+      <AppHeader />
 
-      {/* Right pane */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top bar */}
-        <header className="shrink-0 bg-white border-b border-gray-100 px-6 py-3.5 flex items-center gap-4">
+      <main className="mx-auto w-full max-w-[880px] px-[26px] pb-24 pt-[26px]">
+        {/* Sub-header */}
+        <div className="mb-[22px] flex items-center gap-4">
           <button
             onClick={() => router.push("/")}
-            className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm transition-colors shrink-0"
+            className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] border border-line bg-surface text-ink-2 transition-colors hover:text-ink"
+            title="Back to meetings"
           >
-            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-            </svg>
-            Back
+            <BackIcon />
           </button>
-
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <EditableTitle
               value={meeting.title}
               onSave={(title) => {
                 meetingsApi.update(id, { title });
-                setMeeting((m) => m ? { ...m, title } : m);
+                setMeeting((m) => (m ? { ...m, title } : m));
               }}
             />
-            <p className="text-xs text-gray-400 mt-0.5">{formatDate(meeting.created_at)}</p>
+            <p className="mt-[3px] font-mono text-[12px] text-ink-3">{formatDate(meeting.created_at)}</p>
           </div>
-
           <StatusBadge status={meeting.status} />
-
           {hasTranscript && (
             <div className="relative" ref={exportMenuRef}>
               <button
                 onClick={() => setExportOpen((o) => !o)}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                className="flex items-center gap-1.5 rounded-[11px] border border-line bg-surface px-3 py-2 text-[13px] font-semibold text-ink-2 transition-colors hover:text-ink"
               >
+                <DownloadIcon size={15} />
                 Export
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <ChevronIcon size={14} />
               </button>
               {exportOpen && (
-                <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+                <div className="absolute right-0 z-10 mt-1.5 w-48 overflow-hidden rounded-[12px] border border-line bg-surface py-1 shadow-card">
                   {EXPORT_FORMATS.map(({ key, label }) => (
                     <button
                       key={key}
                       onClick={() => { exportTranscript(id, key); setExportOpen(false); }}
-                      className="w-full text-left text-sm px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                      className="w-full px-4 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
                     >
                       {label}
                     </button>
@@ -298,67 +273,61 @@ export default function MeetingPage() {
               )}
             </div>
           )}
-        </header>
+        </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
-          <main className="max-w-4xl mx-auto px-6 py-8 pb-40 space-y-6">
-            {(isProcessing || job) && <JobProgressBar job={job} />}
-
-            {!hasTranscript && !isProcessing && (
-              <div className="space-y-3">
-                <RecordingPanel meetingId={id} onUploaded={handleUploaded} />
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <div className="flex-1 border-t border-gray-200" />
-                  <span>or upload an existing file</span>
-                  <div className="flex-1 border-t border-gray-200" />
-                </div>
-                <DropZone meetingId={id} onUploaded={handleUploaded} />
-              </div>
-            )}
-
-            {hasTranscript && (
-              <TranscriptViewer
-                ref={transcriptRef}
-                segments={segments}
-                speakers={speakers}
-                meetingId={id}
-                currentTime={currentTime}
-                onSeek={seek}
-                onSegmentUpdate={handleSegmentUpdate}
-                onSpeakerRename={handleSpeakerRename}
-                onAddNote={handleAddNoteFromTranscript}
+        {/* Body */}
+        {isProcessing ? (
+          <JobProgressBar job={job} />
+        ) : hasTranscript ? (
+          <div className="flex flex-col gap-3.5">
+            {audioSrc && (
+              <WaveformPlayer
+                src={audioSrc}
+                audioRef={audioRef}
+                seed={id}
+                onTimeUpdate={setCurrentTime}
               />
             )}
 
-            {isProcessing && !job && (
-              <div className="text-center py-16 text-gray-400 text-sm">
-                Processing your recording…
-              </div>
+            <TranscriptViewer
+              ref={transcriptRef}
+              segments={segments}
+              speakers={speakers}
+              meetingId={id}
+              currentTime={currentTime}
+              onSeek={seek}
+              onSegmentUpdate={handleSegmentUpdate}
+              onSpeakerRename={handleSpeakerRename}
+              onAddNote={handleAddNoteFromTranscript}
+            />
+
+            {audioSrc && (
+              <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 font-mono text-[11px] text-ink-3">
+                <Key k="A" label="−10s" />
+                <Key k="S" label="play / pause" />
+                <Key k="F" label="+10s" />
+                <Key k="D" label="add note" />
+                <Key k="Q" label="rename speaker" />
+              </p>
             )}
 
-            {hasTranscript && meeting.summary && (
+            {meeting.summary ? (
               <SummaryPanel
                 summary={meeting.summary}
                 onRegenerate={async () => {
                   await meetingsApi.summarize(id);
-                  setMeeting((m) => m ? { ...m, summary: null } : m);
+                  setMeeting((m) => (m ? { ...m, summary: null } : m));
                 }}
                 onImportNotes={async () => {
-                  const res = await meetingsApi.importNotesFromSummary(id) as { created: number };
-                  const freshNotes = await notesApi.list(id) as Note[];
+                  const res = (await meetingsApi.importNotesFromSummary(id)) as { created: number };
+                  const freshNotes = (await notesApi.list(id)) as Note[];
                   setNotesList(freshNotes);
                   return res.created;
                 }}
               />
-            )}
-            {hasTranscript && !meeting.summary && meeting.status === "transcribed" && (
-              <SummaryPending
-                onGenerate={async () => {
-                  await meetingsApi.summarize(id);
-                }}
-              />
-            )}
+            ) : meeting.status === "transcribed" ? (
+              <SummaryPending onGenerate={async () => { await meetingsApi.summarize(id); }} />
+            ) : null}
 
             <NotesPanel
               notes={notesList}
@@ -368,30 +337,19 @@ export default function MeetingPage() {
               onUpdate={handleUpdateNote}
               onDelete={handleDeleteNote}
             />
-          </main>
-        </div>
-
-        {/* Fixed audio player + shortcut bar — offset by sidebar width */}
-        {hasTranscript && audioSrc && (
-          <>
-            <div className="fixed bottom-20 left-64 right-0 z-20 pointer-events-none flex justify-center">
-              <div className="flex items-center gap-4 bg-gray-900/80 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full shadow-lg">
-                <Key k="A" label="← 10s" />
-                <Key k="S" label="play/pause" />
-                <Key k="D" label="+ note" />
-                <Key k="F" label="10s →" />
-                <Key k="Q" label="rename speaker" />
-              </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <RecordingPanel meetingId={id} onUploaded={handleUploaded} />
+            <div className="flex items-center gap-3.5 font-mono text-[11px] uppercase tracking-[.06em] text-ink-3">
+              <span className="h-px flex-1 bg-line" />
+              or upload a file
+              <span className="h-px flex-1 bg-line" />
             </div>
-            <AudioPlayer
-              src={audioSrc}
-              audioRef={audioRef}
-              onTimeUpdate={setCurrentTime}
-              barClassName="left-64"
-            />
-          </>
+            <DropZone meetingId={id} onUploaded={handleUploaded} />
+          </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
@@ -399,8 +357,8 @@ export default function MeetingPage() {
 function Key({ k, label }: { k: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <kbd className="bg-white/20 rounded px-1.5 py-0.5 font-mono font-bold text-xs">{k}</kbd>
-      <span className="text-white/70">{label}</span>
+      <kbd className="rounded-[5px] border border-line bg-surface px-1.5 py-0.5 font-bold text-ink-2">{k}</kbd>
+      {label}
     </span>
   );
 }
@@ -420,14 +378,14 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
           if (e.key === "Enter") { setEditing(false); onSave(draft); }
           if (e.key === "Escape") { setEditing(false); setDraft(value); }
         }}
-        className="text-lg font-semibold bg-transparent border-b border-brand-400 outline-none w-full"
+        className="w-full border-b border-accent bg-transparent font-display text-[23px] font-bold tracking-[-.01em] text-ink outline-none"
       />
     );
   }
   return (
     <h1
       onClick={() => setEditing(true)}
-      className="text-lg font-semibold text-gray-900 cursor-text hover:text-brand-600 transition-colors truncate"
+      className="cursor-text truncate font-display text-[23px] font-bold tracking-[-.01em] text-ink transition-colors hover:text-accent"
       title="Click to rename"
     >
       {value}

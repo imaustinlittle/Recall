@@ -4,20 +4,21 @@ import { useState, useRef } from "react";
 import { Note, NoteType } from "@/lib/types";
 
 // ── Type config ────────────────────────────────────────────────────────────
+// `accent` is the per-type dot/label colour. Backgrounds use a tint of it.
 
-const TYPE_CONFIG: Record<NoteType, { label: string; icon: string; color: string; bg: string }> = {
-  general:     { label: "Note",        icon: "📝", color: "text-gray-600",  bg: "bg-gray-100"  },
-  action_item: { label: "Action Item", icon: "✅", color: "text-blue-700",  bg: "bg-blue-50"   },
-  decision:    { label: "Decision",    icon: "⚡", color: "text-green-700", bg: "bg-green-50"  },
-  question:    { label: "Question",    icon: "❓", color: "text-amber-700", bg: "bg-amber-50"  },
+const TYPE_CONFIG: Record<NoteType, { label: string; icon: string; color: string }> = {
+  general: { label: "Note", icon: "📝", color: "var(--ink-2)" },
+  action_item: { label: "Action Item", icon: "✅", color: "#3B82F6" },
+  decision: { label: "Decision", icon: "⚡", color: "#1F9D6B" },
+  question: { label: "Question", icon: "❓", color: "#C8862A" },
 };
 
 const FILTER_TABS: { key: NoteType | "all"; label: string }[] = [
-  { key: "all",         label: "All"          },
+  { key: "all", label: "All" },
   { key: "action_item", label: "Action Items" },
-  { key: "decision",    label: "Decisions"    },
-  { key: "question",    label: "Questions"    },
-  { key: "general",     label: "Notes"        },
+  { key: "decision", label: "Decisions" },
+  { key: "question", label: "Questions" },
+  { key: "general", label: "Notes" },
 ];
 
 function fmtTime(seconds: number): string {
@@ -26,6 +27,10 @@ function fmtTime(seconds: number): string {
   const s = Math.floor(seconds % 60);
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function tint(color: string) {
+  return color === "var(--ink-2)" ? "var(--surface-2)" : `color-mix(in srgb, ${color} 10%, transparent)`;
 }
 
 // ── NoteCard ───────────────────────────────────────────────────────────────
@@ -64,11 +69,11 @@ function NoteCard({
 
   if (editing) {
     return (
-      <div className={`rounded-lg border p-3 space-y-2 ${cfg.bg} border-transparent`}>
+      <div className="space-y-2 rounded-[12px] border border-line p-3" style={{ background: tint(cfg.color) }}>
         <select
           value={draftType}
           onChange={(e) => setDraftType(e.target.value as NoteType)}
-          className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none"
+          className="rounded-[8px] border border-line bg-surface px-2 py-1 text-xs text-ink focus:outline-none"
         >
           {Object.entries(TYPE_CONFIG).map(([k, v]) => (
             <option key={k} value={k}>{v.icon} {v.label}</option>
@@ -79,17 +84,17 @@ function NoteCard({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={3}
-          className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="w-full resize-none rounded-[10px] border border-line bg-surface px-2.5 py-1.5 text-sm text-ink focus:border-accent focus:outline-none"
         />
         <div className="flex gap-2">
           <button
             onClick={handleSave}
             disabled={saving || !draft.trim()}
-            className="text-xs px-3 py-1 bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50"
+            className="rounded-[9px] bg-accent px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save"}
           </button>
-          <button onClick={handleCancel} className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700">
+          <button onClick={handleCancel} className="px-3 py-1 text-xs font-semibold text-ink-2 hover:text-ink">
             Cancel
           </button>
         </div>
@@ -98,48 +103,43 @@ function NoteCard({
   }
 
   return (
-    <div className={`group rounded-lg border border-transparent hover:border-gray-200 p-3 space-y-1.5 ${cfg.bg} transition-colors`}>
-      <div className="flex items-center gap-2 flex-wrap">
+    <div
+      className="group space-y-1.5 rounded-[12px] border border-transparent p-3 transition-colors hover:border-line"
+      style={{ background: tint(cfg.color) }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs">{cfg.icon}</span>
-        <span className={`text-xs font-medium ${cfg.color}`}>{cfg.label}</span>
+        <span className="text-xs font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
         {note.timestamp_ref != null && (
           <button
             onClick={() => onSeek?.(note.timestamp_ref!)}
-            className="font-mono text-xs text-gray-400 hover:text-brand-500 transition-colors"
+            className="font-mono text-xs text-ink-3 transition-colors hover:text-accent"
             title="Jump to this timestamp"
           >
             @ {fmtTime(note.timestamp_ref)}
           </button>
         )}
-        <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => setEditing(true)}
-            className="text-gray-400 hover:text-gray-600 text-xs px-1"
-            title="Edit"
-          >
+        <div className="ml-auto flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button onClick={() => setEditing(true)} className="px-1 text-xs text-ink-3 hover:text-ink" title="Edit">
             ✎
           </button>
           {confirming ? (
             <>
-              <button onClick={() => onDelete(note.id)} className="text-red-500 hover:text-red-700 text-xs px-1">
+              <button onClick={() => onDelete(note.id)} className="px-1 text-xs text-status-red hover:opacity-80">
                 Confirm
               </button>
-              <button onClick={() => setConfirming(false)} className="text-gray-400 hover:text-gray-600 text-xs px-1">
+              <button onClick={() => setConfirming(false)} className="px-1 text-xs text-ink-3 hover:text-ink">
                 ✕
               </button>
             </>
           ) : (
-            <button
-              onClick={() => setConfirming(true)}
-              className="text-gray-400 hover:text-red-500 text-xs px-1"
-              title="Delete"
-            >
+            <button onClick={() => setConfirming(true)} className="px-1 text-xs text-ink-3 hover:text-status-red" title="Delete">
               🗑
             </button>
           )}
         </div>
       </div>
-      <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{note.body}</p>
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{note.body}</p>
     </div>
   );
 }
@@ -185,7 +185,7 @@ function AddNoteForm({
     return (
       <button
         onClick={handleOpen}
-        className="w-full text-left text-sm text-gray-400 hover:text-gray-600 border border-dashed border-gray-300 hover:border-gray-400 rounded-lg px-3 py-2.5 transition-colors"
+        className="w-full rounded-[10px] border border-dashed border-line-strong px-3 py-2.5 text-left text-sm text-ink-3 transition-colors hover:border-accent hover:text-accent"
       >
         + Add a note…
       </button>
@@ -193,12 +193,12 @@ function AddNoteForm({
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white shadow-sm">
+    <div className="space-y-2 rounded-[12px] border border-line bg-surface p-3 shadow-card-sm">
       <div className="flex items-center gap-2">
         <select
           value={type}
           onChange={(e) => setType(e.target.value as NoteType)}
-          className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none"
+          className="rounded-[8px] border border-line bg-surface px-2 py-1 text-xs text-ink focus:outline-none"
         >
           {Object.entries(TYPE_CONFIG).map(([k, v]) => (
             <option key={k} value={k}>{v.icon} {v.label}</option>
@@ -207,11 +207,12 @@ function AddNoteForm({
         {currentTime != null && currentTime > 0 && (
           <button
             onClick={() => setTimestampRef(timestampRef === null ? currentTime : null)}
-            className={`text-xs px-2 py-1 rounded border transition-colors ${
+            className={[
+              "rounded-[8px] border px-2 py-1 text-xs transition-colors",
               timestampRef !== null
-                ? "bg-brand-100 border-brand-300 text-brand-700"
-                : "border-gray-200 text-gray-500 hover:border-gray-300"
-            }`}
+                ? "border-accent-line bg-accent-weak text-accent"
+                : "border-line text-ink-2 hover:border-line-strong",
+            ].join(" ")}
             title="Link to current playback position"
           >
             {timestampRef !== null ? `@ ${fmtTime(timestampRef)} ✓` : `@ ${fmtTime(currentTime)}`}
@@ -225,19 +226,19 @@ function AddNoteForm({
         onKeyDown={handleKeyDown}
         placeholder="Write your note… (Ctrl+Enter to save)"
         rows={3}
-        className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-400"
+        className="w-full resize-none rounded-[10px] border border-line bg-surface px-2.5 py-1.5 text-sm text-ink focus:border-accent focus:outline-none"
       />
       <div className="flex gap-2">
         <button
           onClick={handleAdd}
           disabled={saving || !body.trim()}
-          className="text-xs px-3 py-1 bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50"
+          className="rounded-[9px] bg-accent px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-50"
         >
           {saving ? "Adding…" : "Add Note"}
         </button>
         <button
           onClick={() => { setOpen(false); setBody(""); setTimestampRef(null); }}
-          className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700"
+          className="px-3 py-1 text-xs font-semibold text-ink-2 hover:text-ink"
         >
           Cancel
         </button>
@@ -270,15 +271,14 @@ export function NotesPanel({
     key === "all" ? notes.length : notes.filter((n) => n.note_type === key).length;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-900">Notes</h2>
-        <span className="text-xs text-gray-400">{notes.length} total</span>
+    <div className="rounded-[18px] border border-line bg-surface shadow-card-sm">
+      <div className="flex items-center justify-between border-b border-line px-[22px] py-[14px]">
+        <h2 className="font-mono text-[11.5px] font-semibold uppercase tracking-[.1em] text-ink-2">Notes</h2>
+        <span className="font-mono text-[12px] text-ink-3">{notes.length} total</span>
       </div>
 
-      {/* Filter tabs */}
       {notes.length > 0 && (
-        <div className="flex gap-0.5 px-3 pt-2 overflow-x-auto">
+        <div className="flex gap-0.5 overflow-x-auto px-3 pt-2">
           {FILTER_TABS.map((tab) => {
             const count = countFor(tab.key);
             if (count === 0 && tab.key !== "all") return null;
@@ -286,34 +286,27 @@ export function NotesPanel({
               <button
                 key={tab.key}
                 onClick={() => setFilter(tab.key)}
-                className={`text-xs px-2.5 py-1 rounded-md whitespace-nowrap transition-colors ${
+                className={[
+                  "whitespace-nowrap rounded-[8px] px-2.5 py-1 text-xs transition-colors",
                   filter === tab.key
-                    ? "bg-brand-100 text-brand-700 font-medium"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
+                    ? "bg-accent-weak font-semibold text-accent"
+                    : "text-ink-2 hover:bg-surface-2 hover:text-ink",
+                ].join(" ")}
               >
                 {tab.label}
-                {count > 0 && <span className="ml-1 text-gray-400">{count}</span>}
+                {count > 0 && <span className="ml-1 text-ink-3">{count}</span>}
               </button>
             );
           })}
         </div>
       )}
 
-      <div className="p-3 space-y-2">
+      <div className="space-y-2 p-3">
         {filtered.length === 0 && filter !== "all" && (
-          <p className="text-xs text-gray-400 text-center py-2">
-            No {filter.replace("_", " ")}s yet.
-          </p>
+          <p className="py-2 text-center text-xs text-ink-3">No {filter.replace("_", " ")}s yet.</p>
         )}
         {filtered.map((note) => (
-          <NoteCard
-            key={note.id}
-            note={note}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            onSeek={onSeek}
-          />
+          <NoteCard key={note.id} note={note} onUpdate={onUpdate} onDelete={onDelete} onSeek={onSeek} />
         ))}
         <AddNoteForm onAdd={onAdd} currentTime={currentTime} />
       </div>

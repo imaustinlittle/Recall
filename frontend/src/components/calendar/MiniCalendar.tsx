@@ -2,49 +2,24 @@
 
 const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-// Dark theme tokens (used inside the dark sidebar)
-const DARK = {
-  header: "text-gray-200",
-  arrow: "text-gray-400 hover:text-gray-100 hover:bg-white/10",
-  dayLabel: "text-gray-500",
-  dayBase: "text-gray-300 hover:bg-white/10",
-  dayToday: "text-brand-400 font-semibold hover:bg-white/10",
-  daySelected: "bg-brand-600 text-white",
-  dot: "bg-brand-400",
-  dotSelected: "bg-white/60",
-};
-
-const LIGHT = {
-  header: "text-gray-700",
-  arrow: "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
-  dayLabel: "text-gray-400",
-  dayBase: "text-gray-700 hover:bg-gray-100",
-  dayToday: "text-brand-600 font-semibold hover:bg-brand-50",
-  daySelected: "bg-brand-600 text-white",
-  dot: "bg-brand-500",
-  dotSelected: "bg-white/70",
-};
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 interface MiniCalendarProps {
   year: number;
   month: number; // 0-indexed
   /** Set of "YYYY-MM-DD" strings that have at least one meeting */
   activeDates: Set<string>;
-  selectedDate: string | null; // "YYYY-MM-DD" or null
+  selectedDate: string | null;
   onDateSelect: (date: string | null) => void;
   onMonthChange: (year: number, month: number) => void;
-  /** Use dark colour tokens (for display inside a dark sidebar) */
-  dark?: boolean;
 }
 
 function toDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 export function MiniCalendar({
   year,
@@ -53,76 +28,57 @@ export function MiniCalendar({
   selectedDate,
   onDateSelect,
   onMonthChange,
-  dark = false,
 }: MiniCalendarProps) {
-  const t = dark ? DARK : LIGHT;
   const firstDow = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = toDateStr(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    new Date().getDate()
-  );
+  const today = toDateStr(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
 
-  const prevMonth = () => {
-    if (month === 0) onMonthChange(year - 1, 11);
-    else onMonthChange(year, month - 1);
-  };
+  const prevMonth = () => (month === 0 ? onMonthChange(year - 1, 11) : onMonthChange(year, month - 1));
+  const nextMonth = () => (month === 11 ? onMonthChange(year + 1, 0) : onMonthChange(year, month + 1));
 
-  const nextMonth = () => {
-    if (month === 11) onMonthChange(year + 1, 0);
-    else onMonthChange(year, month + 1);
-  };
-
-  // Build grid cells: leading blanks + days
   const cells: (number | null)[] = [
     ...Array(firstDow).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
-  // Pad to complete last row
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
     <div className="select-none">
-      {/* Month header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex items-center justify-between">
         <button
           onClick={prevMonth}
-          className={`p-1 rounded transition-colors ${t.arrow}`}
           aria-label="Previous month"
+          className="rounded-[8px] p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
         >
-          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <span className={`text-sm font-medium ${t.header}`}>
+        <span className="font-display text-sm font-semibold text-ink">
           {MONTH_NAMES[month]} {year}
         </span>
         <button
           onClick={nextMonth}
-          className={`p-1 rounded transition-colors ${t.arrow}`}
           aria-label="Next month"
+          className="rounded-[8px] p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
         >
-          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18l6-6-6-6" />
           </svg>
         </button>
       </div>
 
-      {/* Day-of-week labels */}
-      <div className="grid grid-cols-7 mb-1">
+      <div className="mb-1 grid grid-cols-7">
         {DAY_LABELS.map((d) => (
-          <div key={d} className={`text-center text-xs font-medium py-0.5 ${t.dayLabel}`}>
+          <div key={d} className="py-0.5 text-center font-mono text-[10px] font-medium text-ink-3">
             {d}
           </div>
         ))}
       </div>
 
-      {/* Day cells */}
       <div className="grid grid-cols-7">
         {cells.map((day, idx) => {
           if (!day) return <div key={`blank-${idx}`} />;
-
           const dateStr = toDateStr(year, month, day);
           const hasActivity = activeDates.has(dateStr);
           const isSelected = selectedDate === dateStr;
@@ -133,17 +89,19 @@ export function MiniCalendar({
               key={dateStr}
               onClick={() => onDateSelect(isSelected ? null : dateStr)}
               className={[
-                "relative flex flex-col items-center justify-center w-full aspect-square rounded-lg text-xs font-medium transition-colors",
-                isSelected ? t.daySelected : isToday ? t.dayToday : t.dayBase,
+                "relative flex aspect-square w-full flex-col items-center justify-center rounded-[8px] text-xs font-medium transition-colors",
+                isSelected
+                  ? "bg-accent text-on-accent"
+                  : isToday
+                  ? "font-semibold text-accent hover:bg-accent-weak"
+                  : "text-ink-2 hover:bg-surface-2",
               ].join(" ")}
             >
               {day}
               {hasActivity && (
                 <span
-                  className={[
-                    "absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full",
-                    isSelected ? t.dotSelected : t.dot,
-                  ].join(" ")}
+                  className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
+                  style={{ background: isSelected ? "var(--on-accent)" : "var(--accent)" }}
                 />
               )}
             </button>

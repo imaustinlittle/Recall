@@ -46,7 +46,7 @@ function buildBlocks(segments: TranscriptSegment[]): SpeechBlock[] {
         key: seg.id,
         speakerId: seg.speaker_id ?? null,
         speakerName: seg.speaker?.display_name || seg.speaker?.label || "Unknown",
-        speakerColor: seg.speaker?.color_hex ?? "#94a3b8",
+        speakerColor: seg.speaker?.color_hex ?? "var(--ink-3)",
         segments: [seg],
         start_time: seg.start_time,
         end_time: seg.end_time,
@@ -64,10 +64,10 @@ function overlaps(a: SpeechBlock, b: SpeechBlock): boolean {
 // ── Inline note form ───────────────────────────────────────────────────────────
 
 const NOTE_TYPES: { key: NoteType; label: string; icon: string }[] = [
-  { key: "general",     label: "Note",        icon: "📝" },
-  { key: "action_item", label: "Action Item",  icon: "✅" },
-  { key: "decision",    label: "Decision",     icon: "⚡" },
-  { key: "question",    label: "Question",     icon: "❓" },
+  { key: "general", label: "Note", icon: "📝" },
+  { key: "action_item", label: "Action Item", icon: "✅" },
+  { key: "decision", label: "Decision", icon: "⚡" },
+  { key: "question", label: "Question", icon: "❓" },
 ];
 
 function InlineNoteForm({
@@ -95,13 +95,13 @@ function InlineNoteForm({
   };
 
   return (
-    <div className="mt-3 border border-brand-200 rounded-xl bg-brand-50/50 p-3 space-y-2 shadow-sm">
+    <div className="mt-3 space-y-2 rounded-[12px] border border-accent-line bg-accent-weak p-3">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-brand-600 font-medium font-mono">@ {formatTime(timestamp)}</span>
+        <span className="font-mono text-[11px] font-semibold text-accent">@ {formatTime(timestamp)}</span>
         <select
           value={type}
           onChange={(e) => setType(e.target.value as NoteType)}
-          className="ml-auto text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="ml-auto rounded-[8px] border border-line bg-surface px-2 py-1 text-xs text-ink focus:outline-none"
         >
           {NOTE_TYPES.map((t) => (
             <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
@@ -118,17 +118,17 @@ function InlineNoteForm({
         }}
         placeholder="Add a note… (Ctrl+Enter to save)"
         rows={2}
-        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white"
+        className="w-full resize-none rounded-[10px] border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
       />
       <div className="flex gap-2">
         <button
           onClick={handleSave}
           disabled={saving || !body.trim()}
-          className="text-xs px-3 py-1 bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-50 transition-colors"
+          className="rounded-[9px] bg-accent px-4 py-1.5 text-xs font-semibold text-on-accent disabled:opacity-50"
         >
           {saving ? "Saving…" : "Add Note"}
         </button>
-        <button onClick={onClose} className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700">
+        <button onClick={onClose} className="px-2 py-1.5 text-xs font-semibold text-ink-2 hover:text-ink">
           Cancel
         </button>
       </div>
@@ -180,21 +180,21 @@ function EditArea({
           if (e.key === "Escape") onCancel();
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSave();
         }}
-        className="w-full text-sm text-gray-800 border border-brand-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none overflow-hidden"
+        className="w-full resize-none overflow-hidden rounded-[10px] border border-accent bg-inset px-3 py-2 text-[14.5px] leading-[1.6] text-ink focus:outline-none focus:shadow-[0_0_0_3px_var(--accent-weak)]"
         style={{ minHeight: "4rem" }}
       />
-      <div className="flex gap-2 items-center">
+      <div className="flex items-center gap-2">
         <button
           onClick={onSave}
           disabled={saving}
-          className="text-xs bg-brand-600 text-white px-3 py-1 rounded-lg hover:bg-brand-700 disabled:opacity-60"
+          className="rounded-[9px] bg-accent px-4 py-1.5 text-xs font-semibold text-on-accent disabled:opacity-60"
         >
           {saving ? "Saving…" : "Save"}
         </button>
-        <button onClick={onCancel} className="text-xs text-gray-500 px-3 py-1 rounded-lg hover:bg-gray-100">
+        <button onClick={onCancel} className="rounded-[9px] px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-surface-2">
           Cancel
         </button>
-        <span className="text-xs text-gray-300 ml-1">Ctrl+Enter to save · Esc to cancel</span>
+        <span className="ml-1 font-mono text-[10px] text-ink-3">Ctrl+Enter to save · Esc to cancel</span>
       </div>
     </div>
   );
@@ -237,7 +237,6 @@ function SpeechBlockCard({
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
 
-  // Keyboard shortcut D can force this block's note form open
   useEffect(() => {
     if (forceNoteOpen && !noteOpen) {
       setNoteOpen(true);
@@ -252,37 +251,33 @@ function SpeechBlockCard({
   return (
     <div
       ref={blockRef}
-      className={`group relative rounded-2xl p-4 transition-all ${
-        isActive ? "ring-2 ring-inset shadow-sm" : "hover:shadow-sm"
-      } ${dimmed ? "opacity-60" : ""}`}
-      style={{
-        backgroundColor: isActive ? `${block.speakerColor}15` : "transparent",
-        ringColor: isActive ? block.speakerColor : undefined,
-      } as React.CSSProperties}
+      className={`group relative rounded-[14px] p-4 transition-colors ${dimmed ? "opacity-60" : ""}`}
+      style={{ backgroundColor: isActive ? "var(--accent-weak)" : "transparent" }}
     >
       {/* Speaker header */}
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="mb-1.5 flex items-center gap-2">
         <button
           onClick={() => onSeek(block.start_time)}
-          className="flex items-center gap-2 group/ts"
+          className="group/ts flex items-center gap-2"
           title={`Jump to ${formatTime(block.start_time)}`}
         >
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: block.speakerColor }} />
-          <span className="text-xs font-semibold" style={{ color: block.speakerColor }}>
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: block.speakerColor }} />
+          <span className="text-[12.5px] font-bold" style={{ color: block.speakerColor }}>
             {block.speakerName}
           </span>
-          <span className="font-mono text-xs text-gray-400 group-hover/ts:text-brand-500 transition-colors">
+          <span className="font-mono text-[12px] text-ink-3 transition-colors group-hover/ts:text-accent">
             {formatTime(block.start_time)}
           </span>
         </button>
 
-        {hasEdit && <span className="text-xs text-gray-300 ml-1">edited</span>}
+        {hasEdit && (
+          <span className="font-mono text-[10px] uppercase tracking-[.05em] text-ink-3">· edited</span>
+        )}
 
-        {/* Note button — always visible, prominent */}
         {onAddNote && !noteOpen && (
           <button
             onClick={() => setNoteOpen(true)}
-            className="ml-auto text-xs text-gray-400 hover:text-brand-600 flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-gray-200 hover:border-brand-400 hover:bg-brand-50 transition-colors"
+            className="ml-auto flex items-center gap-1 rounded-[8px] border border-dashed border-line px-2 py-1 text-xs text-ink-3 transition-colors hover:border-accent hover:bg-accent-weak hover:text-accent"
             title="Add a note (D)"
           >
             + note
@@ -302,14 +297,13 @@ function SpeechBlockCard({
       ) : (
         <p
           onClick={() => onStartEdit(block.segments[block.segments.length - 1])}
-          className="text-sm text-gray-800 leading-relaxed cursor-text hover:text-gray-900"
+          className="cursor-text text-[14.5px] leading-[1.62] text-ink transition-colors hover:text-accent"
           title="Click to edit"
         >
-          {combinedText || <span className="text-gray-300 italic">empty</span>}
+          {combinedText || <span className="italic text-ink-3">empty</span>}
         </p>
       )}
 
-      {/* Inline note form */}
       {noteOpen && onAddNote && (
         <InlineNoteForm
           timestamp={block.start_time}
@@ -361,12 +355,12 @@ function OverlapRow({
   const sharedBlockProps = { editingId, editDraft, saving, onSeek, onStartEdit, onCancelEdit, onSaveEdit, onDraftChange, onAddNote };
   return (
     <div className="relative">
-      <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10">
-        <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-200 shadow-sm whitespace-nowrap">
+      <div className="absolute -top-2 left-1/2 z-10 -translate-x-1/2">
+        <span className="whitespace-nowrap rounded-full border border-line bg-surface px-2 py-0.5 font-mono text-[10px] uppercase tracking-[.05em] text-ink-3 shadow-card-sm">
           speaking simultaneously
         </span>
       </div>
-      <div className="flex gap-3 mt-2">
+      <div className="mt-2 flex gap-3">
         <div className="flex-1">
           <SpeechBlockCard
             block={left}
@@ -377,7 +371,7 @@ function OverlapRow({
             {...sharedBlockProps}
           />
         </div>
-        <div className="w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent self-stretch" />
+        <div className="w-px self-stretch bg-line" />
         <div className="flex-1">
           <SpeechBlockCard
             block={right}
@@ -409,6 +403,7 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
   const [saving, setSaving] = useState(false);
   const [noteOpenKey, setNoteOpenKey] = useState<string | null>(null);
   const [editSpeakerId, setEditSpeakerId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const activeSegment = segments.findLast((s) => s.start_time <= currentTime);
   const activeRef = useRef<HTMLDivElement>(null);
@@ -438,7 +433,6 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
     }
   };
 
-  // Expose imperative methods to page level for keyboard shortcuts
   useImperativeHandle(ref, () => ({
     openNoteForActiveBlock: () => {
       if (activeBlock) setNoteOpenKey(activeBlock.key);
@@ -448,7 +442,6 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
     },
   }), [activeBlock]);
 
-  // Click outside cancels edit
   useEffect(() => {
     if (!editingId) return;
     const handler = (e: MouseEvent) => {
@@ -460,22 +453,28 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
     return () => document.removeEventListener("mousedown", handler);
   }, [editingId]);
 
-  // Scroll when active block changes
   useEffect(() => {
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeBlock?.key]);
 
-  // Build render items
+  // Search filter — match against text or speaker name (case-insensitive)
+  const q = search.trim().toLowerCase();
+  const matchBlock = (b: SpeechBlock) =>
+    !q ||
+    b.speakerName.toLowerCase().includes(q) ||
+    b.segments.some((s) => s.content.toLowerCase().includes(q));
+  const visibleBlocks = blocks.filter(matchBlock);
+
   type RenderItem =
     | { type: "single"; block: SpeechBlock }
     | { type: "overlap"; left: SpeechBlock; right: SpeechBlock };
 
   const items: RenderItem[] = [];
   let i = 0;
-  while (i < blocks.length) {
-    const cur = blocks[i];
-    const next = blocks[i + 1];
-    if (next && overlaps(cur, next)) {
+  while (i < visibleBlocks.length) {
+    const cur = visibleBlocks[i];
+    const next = visibleBlocks[i + 1];
+    if (!q && next && overlaps(cur, next)) {
       items.push({ type: "overlap", left: cur, right: next });
       i += 2;
     } else {
@@ -497,10 +496,10 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
   };
 
   return (
-    <div ref={containerRef} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-      {/* Speaker legend */}
-      {speakers.length > 0 && (
-        <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap gap-3">
+    <div className="flex flex-col gap-3.5">
+      {/* Speaker legend + search */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-1 flex-wrap items-center gap-[7px]">
           {speakers.map((sp) => (
             <SpeakerChip
               key={sp.id}
@@ -511,41 +510,66 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
             />
           ))}
         </div>
-      )}
+        <div className="relative flex w-[230px] items-center">
+          <span className="absolute left-3 flex text-ink-3">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
+            </svg>
+          </span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search transcript"
+            className="w-full rounded-[11px] border border-line bg-surface py-[9px] pl-9 pr-12 text-[13.5px] text-ink focus:border-accent focus:outline-none focus:shadow-[0_0_0_3px_var(--accent-weak)]"
+          />
+          {q && (
+            <span className="absolute right-3 font-mono text-[11px] font-semibold text-accent">
+              {visibleBlocks.length}
+            </span>
+          )}
+        </div>
+      </div>
 
-      {/* Speech blocks */}
-      <div className="p-4 space-y-1">
-        {items.map((item) => {
-          if (item.type === "single") {
-            const isActive = item.block.segments.some((s) => s.id === activeSegment?.id);
+      {/* Segments */}
+      <div
+        ref={containerRef}
+        className="scrollbar-thin max-h-[60vh] overflow-y-auto rounded-[18px] border border-line bg-surface p-2 shadow-card"
+      >
+        {items.length === 0 ? (
+          <p className="py-10 text-center text-sm text-ink-3">No segments match “{search}”.</p>
+        ) : (
+          items.map((item) => {
+            if (item.type === "single") {
+              const isActive = item.block.segments.some((s) => s.id === activeSegment?.id);
+              return (
+                <SpeechBlockCard
+                  key={item.block.key}
+                  block={item.block}
+                  isActive={isActive}
+                  blockRef={isActive ? activeRef : undefined}
+                  forceNoteOpen={noteOpenKey === item.block.key}
+                  onNoteOpened={() => setNoteOpenKey(null)}
+                  {...sharedEditProps}
+                />
+              );
+            }
+            const isActiveLeft = item.left.segments.some((s) => s.id === activeSegment?.id);
+            const isActiveRight = item.right.segments.some((s) => s.id === activeSegment?.id);
             return (
-              <SpeechBlockCard
-                key={item.block.key}
-                block={item.block}
-                isActive={isActive}
-                blockRef={isActive ? activeRef : undefined}
-                forceNoteOpen={noteOpenKey === item.block.key}
+              <OverlapRow
+                key={`${item.left.key}-${item.right.key}`}
+                left={item.left}
+                right={item.right}
+                isActiveLeft={isActiveLeft}
+                isActiveRight={isActiveRight}
+                activeRef={(isActiveLeft || isActiveRight) ? activeRef : undefined}
+                forceNoteOpenKey={noteOpenKey}
                 onNoteOpened={() => setNoteOpenKey(null)}
                 {...sharedEditProps}
               />
             );
-          }
-          const isActiveLeft  = item.left.segments.some((s)  => s.id === activeSegment?.id);
-          const isActiveRight = item.right.segments.some((s) => s.id === activeSegment?.id);
-          return (
-            <OverlapRow
-              key={`${item.left.key}-${item.right.key}`}
-              left={item.left}
-              right={item.right}
-              isActiveLeft={isActiveLeft}
-              isActiveRight={isActiveRight}
-              activeRef={(isActiveLeft || isActiveRight) ? activeRef : undefined}
-              forceNoteOpenKey={noteOpenKey}
-              onNoteOpened={() => setNoteOpenKey(null)}
-              {...sharedEditProps}
-            />
-          );
-        })}
+          })
+        )}
       </div>
     </div>
   );
@@ -567,7 +591,6 @@ function SpeakerChip({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(speaker.display_name || speaker.label);
 
-  // Keyboard shortcut Q can force edit mode
   useEffect(() => {
     if (forceEdit && !editing) {
       setEditing(true);
@@ -590,7 +613,7 @@ function SpeakerChip({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-        className="text-xs border border-gray-300 rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-brand-400 w-28"
+        className="w-28 rounded-full border border-accent bg-surface px-3 py-1 text-[12.5px] text-ink focus:outline-none focus:shadow-[0_0_0_3px_var(--accent-weak)]"
       />
     );
   }
@@ -598,10 +621,10 @@ function SpeakerChip({
   return (
     <button
       onClick={() => setEditing(true)}
-      className="inline-flex items-center gap-1.5 text-xs rounded-full px-3 py-1 border border-gray-200 hover:border-gray-300 transition-colors"
+      className="inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border border-line bg-surface py-[5px] pl-[9px] pr-3 text-[12.5px] font-semibold text-ink transition-colors hover:border-line-strong"
       title="Click to rename speaker (Q)"
     >
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: speaker.color_hex }} />
+      <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ backgroundColor: speaker.color_hex }} />
       {speaker.display_name || speaker.label}
     </button>
   );

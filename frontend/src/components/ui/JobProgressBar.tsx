@@ -7,104 +7,96 @@ interface Props {
   job: Job | null;
 }
 
-// Steps match the progress ranges emitted by tasks.py
-const STEPS = [
-  { label: "Starting",           from: 0.00, to: 0.10 },
-  { label: "Extracting audio",   from: 0.10, to: 0.20 },
-  { label: "Transcribing",       from: 0.20, to: 0.65 },
-  { label: "Identifying speakers", from: 0.65, to: 0.80 },
-  { label: "Saving speakers",    from: 0.80, to: 0.88 },
-  { label: "Saving transcript",  from: 0.88, to: 1.00 },
-];
+const PROC_BARS = Array.from({ length: 28 }, (_, i) => -(i * 0.05));
 
-function getStepState(step: typeof STEPS[0], progress: number, isDone: boolean) {
-  if (isDone || progress >= step.to) return "done";
-  if (progress >= step.from)        return "active";
-  return "pending";
+function StatusMessage(job: Job): string {
+  if (job.message) return job.message;
+  const p = job.progress;
+  if (p < 0.12) return "Waiting in queue…";
+  if (p < 0.9) return "Transcribing audio…";
+  return "Finalizing transcript…";
 }
 
 export function JobProgressBar({ job }: Props) {
-  if (!job) {
+  const pct = job ? Math.round(job.progress * 100) : 0;
+  const isFailed = job?.status === "failed";
+  const isDone = job?.status === "completed";
+
+  // ── Failure state ──
+  if (isFailed) {
     return (
-      <div className="bg-white border border-gray-200 rounded-2xl px-6 py-4 flex items-center gap-4">
-        <Spinner size="sm" />
-        <p className="text-sm text-gray-500">Waiting for worker…</p>
+      <div
+        className="rounded-[18px] border p-[22px]"
+        style={{
+          background: "color-mix(in srgb, #E0533A 9%, var(--surface))",
+          borderColor: "color-mix(in srgb, #E0533A 26%, transparent)",
+        }}
+      >
+        <p className="text-[14.5px] font-semibold" style={{ color: "#E0533A" }}>
+          Transcription failed
+        </p>
+        {job?.error_info && (
+          <p className="mt-2 rounded-lg bg-inset px-3 py-2 font-mono text-[12px] text-ink-2">
+            {job.error_info.type}: {job.error_info.error}
+          </p>
+        )}
       </div>
     );
   }
 
-  const pct = Math.round(job.progress * 100);
-  const isFailed = job.status === "failed";
-  const isDone   = job.status === "completed";
-
   return (
-    <div className={`border rounded-2xl px-6 py-5 space-y-4 ${
-      isFailed ? "bg-red-50 border-red-200"
-      : isDone  ? "bg-green-50 border-green-200"
-      : "bg-white border-gray-200"
-    }`}>
-
-      {/* ── Overall header ── */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {!isDone && !isFailed && <Spinner size="sm" />}
-          {isDone  && <span className="text-green-600 text-lg">✓</span>}
-          {isFailed && <span className="text-red-600 text-lg">✕</span>}
-          <p className="text-sm font-medium text-gray-700">
-            {isDone   ? "Transcription complete"
-            : isFailed ? "Transcription failed"
-            : job.message ?? "Processing…"}
-          </p>
-        </div>
-        {!isDone && !isFailed && (
-          <span className="text-sm font-mono text-gray-400 shrink-0">{pct}%</span>
-        )}
+    <div className="rounded-[18px] border border-line bg-surface p-[34px] shadow-card">
+      {/* Animated waveform */}
+      <div className="mb-[26px] flex h-[84px] items-center justify-center gap-1">
+        {PROC_BARS.map((delay, i) => (
+          <div
+            key={i}
+            className="w-[5px] origin-center rounded-[3px] bg-accent opacity-85"
+            style={{
+              height: 60,
+              animation: "meter 1.1s ease-in-out infinite",
+              animationDelay: `${delay}s`,
+            }}
+          />
+        ))}
       </div>
 
-      {/* ── Overall progress bar ── */}
-      {!isDone && !isFailed && (
-        <div className="w-full bg-gray-100 rounded-full h-2">
-          <div
-            className="bg-brand-500 h-2 rounded-full transition-all duration-500"
-            style={{ width: `${pct}%` }}
-          />
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-[11px]">
+          {isDone ? (
+            <span className="text-status-green">✓</span>
+          ) : (
+            <span
+              className="inline-block h-[18px] w-[18px] rounded-full border-2 border-accent-line border-t-accent"
+              style={{ animation: "spin .8s linear infinite" }}
+            />
+          )}
+          <div>
+            <p className="text-[14.5px] font-semibold text-ink">
+              {isDone ? "Transcription complete" : job ? StatusMessage(job) : "Waiting for worker…"}
+            </p>
+            <p className="mt-0.5 font-mono text-[12px] text-ink-3">
+              {job ? `faster-whisper · base · ${pct}%` : "queued"}
+            </p>
+          </div>
         </div>
-      )}
+        <span className="font-mono text-[22px] font-semibold tabular-nums text-accent">
+          {pct}%
+        </span>
+      </div>
 
-      {/* ── Per-step breakdown ── */}
-      {!isFailed && (
-        <div className="grid grid-cols-3 gap-x-4 gap-y-2 pt-1 sm:grid-cols-6">
-          {STEPS.map((step) => {
-            const state = getStepState(step, job.progress, isDone);
-            return (
-              <div key={step.label} className="flex flex-col items-center gap-1">
-                {/* Step bar */}
-                <div className="w-full bg-gray-100 rounded-full h-1">
-                  <div className={`h-1 rounded-full transition-all duration-500 ${
-                    state === "done"   ? "w-full bg-green-500"
-                    : state === "active" ? "w-1/2 bg-brand-500 animate-pulse"
-                    : "w-0"
-                  }`} />
-                </div>
-                {/* Step label */}
-                <span className={`text-xs text-center leading-tight ${
-                  state === "done"   ? "text-green-600"
-                  : state === "active" ? "text-brand-600 font-medium"
-                  : "text-gray-300"
-                }`}>
-                  {state === "done" ? "✓ " : ""}{step.label}
-                </span>
-              </div>
-            );
-          })}
+      <div className="h-1.5 overflow-hidden rounded-[6px] bg-inset">
+        <div
+          className="h-full rounded-[6px] bg-accent transition-[width] duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      {!job && (
+        <div className="mt-4 flex items-center gap-3 text-sm text-ink-2">
+          <Spinner size="sm" />
+          Waiting for the worker to pick up the job…
         </div>
-      )}
-
-      {/* ── Error details ── */}
-      {isFailed && job.error_info && (
-        <p className="text-xs text-red-500 bg-red-100 rounded-lg px-3 py-2 font-mono">
-          {job.error_info.type}: {job.error_info.error}
-        </p>
       )}
     </div>
   );

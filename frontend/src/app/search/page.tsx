@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { searchApi } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { Spinner } from "@/components/ui/Spinner";
+import { SearchIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
 
 interface Snippet {
@@ -28,9 +29,11 @@ function highlight(text: string, query: string) {
   if (!query) return text;
   const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
   return parts.map((part, i) =>
-    part.toLowerCase() === query.toLowerCase()
-      ? <mark key={i} className="bg-brand-100 text-brand-800 rounded px-0.5">{part}</mark>
-      : part
+    part.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="rounded bg-accent-weak px-0.5 text-accent">{part}</mark>
+    ) : (
+      part
+    )
   );
 }
 
@@ -54,7 +57,6 @@ function SearchContent() {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
 
-  // Run search when query param is present on load
   useEffect(() => {
     const q = searchParams.get("q");
     if (q && user) {
@@ -72,7 +74,7 @@ function SearchContent() {
     setLoading(true);
     setSearched(true);
     try {
-      const res = await searchApi.search(q) as { results: SearchResult[] };
+      const res = (await searchApi.search(q)) as { results: SearchResult[] };
       setResults(res.results);
     } catch {
       setResults([]);
@@ -89,79 +91,74 @@ function SearchContent() {
   };
 
   if (authLoading || !user) {
-    return <div className="flex-1 flex items-center justify-center"><Spinner size="lg" /></div>;
+    return (
+      <div className="flex flex-1 items-center justify-center py-24">
+        <Spinner size="lg" />
+      </div>
+    );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      {/* Top bar */}
-      <header className="shrink-0 bg-white border-b border-gray-100 px-8 py-5">
-        <form onSubmit={handleSubmit} className="max-w-2xl">
-          <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search meetings, transcripts, notes…"
-              className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => { setQuery(""); setResults([]); setSearched(false); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </form>
-      </header>
+    <main className="mx-auto w-full max-w-[720px] px-[26px] pb-20 pt-10">
+      <p className="font-mono text-[12px] font-semibold uppercase tracking-[.1em] text-accent">Search</p>
+      <h1 className="mb-5 mt-1.5 font-display text-[32px] font-bold tracking-[-.02em] text-ink">
+        Find anything
+      </h1>
 
-      {/* Results */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <form onSubmit={handleSubmit}>
+        <div className="relative flex items-center">
+          <span className="absolute left-3.5 text-ink-3">
+            <SearchIcon size={18} />
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search meetings, transcripts, notes…"
+            className="w-full rounded-[12px] border border-line bg-surface py-3 pl-11 pr-4 text-[14.5px] text-ink shadow-card-sm focus:border-accent focus:outline-none focus:shadow-[0_0_0_3px_var(--accent-weak)]"
+          />
+        </div>
+      </form>
+
+      <div className="mt-6">
         {loading ? (
-          <div className="flex justify-center py-24"><Spinner size="lg" /></div>
-        ) : !searched ? (
-          <div className="max-w-2xl text-center py-20 text-gray-400 text-sm">
-            Search across all your meeting transcripts, titles, and notes.
+          <div className="flex justify-center py-20">
+            <Spinner size="lg" />
           </div>
+        ) : !searched ? (
+          <p className="py-16 text-center text-sm text-ink-3">
+            Search across all your meeting transcripts, titles, and notes.
+          </p>
         ) : results.length === 0 ? (
-          <div className="max-w-2xl text-center py-20">
-            <p className="text-gray-500 font-medium mb-1">No results for "{query}"</p>
-            <p className="text-gray-400 text-sm">Try a different keyword or check the spelling.</p>
+          <div className="py-16 text-center">
+            <p className="mb-1 font-semibold text-ink">No results for “{query}”</p>
+            <p className="text-sm text-ink-2">Try a different keyword or check the spelling.</p>
           </div>
         ) : (
-          <div className="max-w-2xl space-y-3">
-            <p className="text-xs text-gray-400 mb-4">{results.length} meeting{results.length !== 1 ? "s" : ""} matched</p>
+          <div className="flex flex-col gap-[11px]">
+            <p className="font-mono text-[12px] text-ink-3">
+              {results.length} meeting{results.length !== 1 ? "s" : ""} matched
+            </p>
             {results.map((result) => (
               <Link
                 key={result.id}
                 href={`/meetings/${result.id}`}
-                className="block bg-white border border-gray-100 rounded-xl px-5 py-4 hover:border-brand-200 hover:shadow-md transition-all"
+                className="block rounded-[16px] border border-line bg-surface px-5 py-4 shadow-card-sm transition-all hover:-translate-y-px hover:border-line-strong"
               >
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <p className="font-medium text-gray-900">{highlight(result.title, query)}</p>
-                  <span className="text-xs text-gray-400 shrink-0">{formatDate(result.created_at)}</span>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <p className="font-semibold text-ink">{highlight(result.title, query)}</p>
+                  <span className="shrink-0 font-mono text-[11.5px] text-ink-3">
+                    {formatDate(result.created_at)}
+                  </span>
                 </div>
                 <div className="space-y-1.5">
                   {result.snippets.slice(0, 3).map((snippet, i) => (
                     <div key={i} className="flex items-start gap-2">
-                      <span className={[
-                        "shrink-0 text-xs px-1.5 py-0.5 rounded font-medium",
-                        snippet.type === "transcript" ? "bg-blue-50 text-blue-600" :
-                        snippet.type === "note" ? "bg-amber-50 text-amber-600" :
-                        "bg-gray-100 text-gray-500"
-                      ].join(" ")}>
+                      <span className="shrink-0 rounded-[6px] bg-inset px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[.04em] text-ink-2">
                         {SNIPPET_LABELS[snippet.type]}
                       </span>
-                      <p className="text-sm text-gray-600 leading-snug">{highlight(snippet.text, query)}</p>
+                      <p className="text-[13.5px] leading-snug text-ink-2">{highlight(snippet.text, query)}</p>
                     </div>
                   ))}
                 </div>
@@ -170,15 +167,21 @@ function SearchContent() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 
 export default function SearchPage() {
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar />
-      <Suspense fallback={<div className="flex-1 flex items-center justify-center"><Spinner size="lg" /></div>}>
+    <div className="flex min-h-screen flex-col">
+      <AppHeader />
+      <Suspense
+        fallback={
+          <div className="flex flex-1 items-center justify-center py-24">
+            <Spinner size="lg" />
+          </div>
+        }
+      >
         <SearchContent />
       </Suspense>
     </div>

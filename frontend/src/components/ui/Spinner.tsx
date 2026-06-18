@@ -2,6 +2,7 @@ import clsx from "clsx";
 
 interface Props {
   size?: "sm" | "md" | "lg";
+  className?: string;
 }
 
 const sizes = {
@@ -10,12 +11,13 @@ const sizes = {
   lg: "w-10 h-10 border-[3px]",
 };
 
-export function Spinner({ size = "md" }: Props) {
+export function Spinner({ size = "md", className }: Props) {
   return (
     <span
       className={clsx(
-        "inline-block rounded-full border-gray-200 border-t-brand-600 animate-spin",
-        sizes[size]
+        "inline-block animate-spin rounded-full border-accent-line border-t-accent",
+        sizes[size],
+        className
       )}
       aria-label="Loading"
     />

@@ -1,27 +1,24 @@
-import clsx from "clsx";
 import { MeetingStatus } from "@/lib/types";
+import { statusStyle } from "@/lib/waveform";
 
-const config: Record<
-  MeetingStatus,
-  { label: string; classes: string }
-> = {
-  pending:     { label: "Pending",     classes: "bg-gray-100 text-gray-500" },
-  uploading:   { label: "Uploading",   classes: "bg-blue-100 text-blue-600" },
-  queued:      { label: "Queued",      classes: "bg-yellow-100 text-yellow-700" },
-  processing:  { label: "Processing",  classes: "bg-blue-100 text-blue-700 animate-pulse" },
-  transcribed: { label: "Transcribed", classes: "bg-green-100 text-green-700" },
-  failed:      { label: "Failed",      classes: "bg-red-100 text-red-600" },
-};
-
-export function StatusBadge({ status }: { status: MeetingStatus }) {
-  const { label, classes } = config[status] ?? config.pending;
+export function StatusBadge({
+  status,
+  fixedWidth = false,
+}: {
+  status: MeetingStatus;
+  /** Render at a fixed 118px width (used in list rows for column alignment). */
+  fixedWidth?: boolean;
+}) {
+  const { label, fg, bg } = statusStyle(status);
   return (
     <span
-      className={clsx(
-        "inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full shrink-0",
-        classes
-      )}
+      className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full px-[11px] py-[5px] font-mono text-[10.5px] font-semibold uppercase tracking-[.06em]"
+      style={{ background: bg, color: fg, width: fixedWidth ? 118 : undefined }}
     >
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: fg }}
+      />
       {label}
     </span>
   );
