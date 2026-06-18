@@ -129,6 +129,43 @@ This is a one-time ~5 GB download. Summaries generate automatically after transc
 
 ---
 
+## Authentication
+
+By default Recall uses its own email/password login (`AUTH_MODE=local`). If you
+run a homelab SSO like **Authentik** in front of your services, you can hand auth
+off to it instead so Recall has no separate login.
+
+### Proxy mode (Authentik forward-auth)
+
+Set in `.env`:
+
+```bash
+AUTH_MODE=proxy
+PROXY_AUTH_ADMIN_GROUP=recall-admins   # optional; blank = every user is admin
+```
+
+Then put Recall behind an Authentik **Proxy Provider** + Traefik `forwardAuth`
+middleware. Authentik injects identity headers (`X-Authentik-Email`,
+`-Name`, `-Groups`) which Recall trusts:
+
+- Users are **provisioned just-in-time** from the headers, keyed by email — all
+  existing meetings/notes stay attached to the same account.
+- A user in `PROXY_AUTH_ADMIN_GROUP` becomes an app admin (can open **Settings**).
+  Leave it blank to treat every authenticated user as an admin.
+- The UI hides its login form and **Sign out** points at Authentik
+  (`PROXY_AUTH_LOGOUT_URL`, default `/outpost.goauthentik.io/sign_out`).
+
+> ⚠️ **Security:** proxy mode trusts the identity headers, so the app must be
+> reachable **only** through the authenticating proxy. In `docker-compose.prod.yml`
+> the `api` is internal-only and just the `frontend` is exposed via Traefik — keep
+> it that way. Make sure your Traefik `forwardAuth` middleware lists those headers
+> in `authResponseHeaders` so a client cannot spoof them.
+
+Header names are configurable (`PROXY_AUTH_*_HEADER`) if you use a different
+provider that sets trusted headers.
+
+---
+
 ## Useful commands
 
 ```bash

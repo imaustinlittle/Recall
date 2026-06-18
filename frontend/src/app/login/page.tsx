@@ -9,7 +9,7 @@ import { useTheme } from "@/lib/useTheme";
 import { MoonIcon, SunIcon } from "@/components/ui/icons";
 import { bars } from "@/lib/waveform";
 
-type Screen = "loading" | "setup" | "login";
+type Screen = "loading" | "setup" | "login" | "proxy";
 
 const HERO_BARS = bars(42, 60, 18);
 
@@ -24,11 +24,25 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setup
-      .status()
-      .then(({ needs_setup }) => setScreen(needs_setup ? "setup" : "login"))
+    auth
+      .config()
+      .then(async (cfg) => {
+        if (cfg.mode === "proxy") {
+          // Identity comes from the upstream proxy (e.g. Authentik). If the
+          // headers are present, /me succeeds and we go straight in.
+          try {
+            await auth.me();
+            router.replace("/");
+          } catch {
+            setScreen("proxy");
+          }
+          return;
+        }
+        const { needs_setup } = await setup.status();
+        setScreen(needs_setup ? "setup" : "login");
+      })
       .catch(() => setScreen("login"));
-  }, []);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +65,31 @@ export default function LoginPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (screen === "proxy") {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center px-6">
+        <div className="relative z-[2] w-full max-w-[392px]">
+          <div className="mb-[26px] flex flex-col items-center gap-[14px]">
+            <Logo size={30} markHeight={30} barWidth={4} />
+          </div>
+          <div className="rounded-[20px] border border-line bg-surface p-[30px] text-center shadow-card">
+            <h2 className="font-display text-base font-bold text-ink">Sign in via your identity provider</h2>
+            <p className="mt-2 text-[13.5px] text-ink-2">
+              This instance authenticates through an upstream proxy, but no identity was
+              received. Sign in to the proxy (e.g. Authentik), then reload this page.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-5 w-full rounded-[11px] bg-accent px-3 py-[13px] text-[14.5px] font-bold text-on-accent shadow-glow"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

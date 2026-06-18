@@ -32,6 +32,19 @@ x-backend-common: &backend-common
     SECRET_KEY: ${SECRET_KEY}
     CORS_ORIGINS: https://recall.austlie.com
     ENVIRONMENT: production
+    # ── Authentication ────────────────────────────────────────────────────
+    # AUTH_MODE=local  → built-in email/password (default)
+    # AUTH_MODE=proxy  → trust forward-auth headers from Authentik/Traefik.
+    #   Only safe because this stack exposes ONLY the frontend via Traefik and
+    #   the api is internal-only. Ensure the Authentik forwardAuth middleware
+    #   lists these headers in authResponseHeaders so a client can't spoof them.
+    AUTH_MODE: ${AUTH_MODE:-local}
+    PROXY_AUTH_EMAIL_HEADER: ${PROXY_AUTH_EMAIL_HEADER:-X-Authentik-Email}
+    PROXY_AUTH_NAME_HEADER: ${PROXY_AUTH_NAME_HEADER:-X-Authentik-Name}
+    PROXY_AUTH_GROUPS_HEADER: ${PROXY_AUTH_GROUPS_HEADER:-X-Authentik-Groups}
+    # Blank → every proxy-authenticated user is an app admin.
+    PROXY_AUTH_ADMIN_GROUP: ${PROXY_AUTH_ADMIN_GROUP:-}
+    PROXY_AUTH_LOGOUT_URL: ${PROXY_AUTH_LOGOUT_URL:-/outpost.goauthentik.io/sign_out}
 
 services:
 

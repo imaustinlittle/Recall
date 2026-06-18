@@ -53,9 +53,32 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     )
 
 
+_PROXY_DISABLED_EXC = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="Local authentication is disabled; sign in through the identity provider.",
+)
+
+
+@router.get("/config")
+async def auth_config():
+    """
+    Public endpoint the frontend uses to decide how to render auth. In proxy
+    mode there is no local login UI and "sign out" points at the proxy.
+    """
+    proxy = settings.is_proxy_auth
+    return {
+        "mode": "proxy" if proxy else "local",
+        "registration_enabled": not proxy,
+        "logout_url": settings.proxy_auth_logout_url if proxy else None,
+    }
+
+
 @router.get("/setup/status")
 async def setup_status(db: AsyncSession = Depends(get_async_db)):
     """Returns whether initial setup is needed (no users exist yet)."""
+    # Proxy mode provisions users from headers — there is no local setup step.
+    if settings.is_proxy_auth:
+        return {"needs_setup": False}
     result = await db.execute(select(models.User).limit(1))
     needs_setup = result.scalar_one_or_none() is None
     return {"needs_setup": needs_setup}
@@ -64,6 +87,8 @@ async def setup_status(db: AsyncSession = Depends(get_async_db)):
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/hour")
 async def register(request: Request, body: UserCreate, db: AsyncSession = Depends(get_async_db)):
+    if settings.is_proxy_auth:
+        raise _PROXY_DISABLED_EXC
     existing = await db.execute(
         select(models.User).where(models.User.email == body.email)
     )
@@ -89,6 +114,8 @@ async def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_db),
 ):
+    if settings.is_proxy_auth:
+        raise _PROXY_DISABLED_EXC
     result = await db.execute(
         select(models.User).where(models.User.email == form.username)
     )

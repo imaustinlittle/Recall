@@ -46,6 +46,13 @@ export const setup = {
   status: () => request<{ needs_setup: boolean }>("/auth/setup/status"),
 };
 
+// ── Auth mode (local vs proxy / Authentik forward-auth) ─────────────────────
+export interface AuthConfig {
+  mode: "local" | "proxy";
+  registration_enabled: boolean;
+  logout_url: string | null;
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const auth = {
   register: (email: string, password: string, display_name?: string) =>
@@ -73,6 +80,8 @@ export const auth = {
     request("/auth/logout", { method: "POST" }).catch(() => {}),
 
   me: () => request("/auth/me"),
+
+  config: () => request<AuthConfig>("/auth/config"),
 };
 
 // ── Meetings ───────────────────────────────────────────────────────────────

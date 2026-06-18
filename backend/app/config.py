@@ -41,6 +41,35 @@ class Settings(BaseSettings):
     def secret_key_is_default(self) -> bool:
         return self.secret_key == self._default_secret
 
+    # ── Authentication mode ──────────────────────────────────────────────────
+    # "local" → built-in email/password login (default).
+    # "proxy" → trust forward-auth identity headers injected by an upstream
+    #           proxy (e.g. Authentik / Traefik forwardAuth). The app does no
+    #           login of its own; users are provisioned just-in-time from the
+    #           headers below. ONLY safe when the app is exclusively reachable
+    #           through the authenticating proxy (the API must never be exposed
+    #           directly, or clients could spoof these headers).
+    auth_mode: str = "local"
+
+    # Header names the proxy sets (Authentik proxy-provider defaults). Header
+    # lookups are case-insensitive.
+    proxy_auth_email_header: str = "X-Authentik-Email"
+    proxy_auth_username_header: str = "X-Authentik-Username"
+    proxy_auth_name_header: str = "X-Authentik-Name"
+    proxy_auth_groups_header: str = "X-Authentik-Groups"
+    # Authentik joins group names with "|" in the groups header.
+    proxy_auth_groups_separator: str = "|"
+    # If set, only users in this group get is_admin. If blank, every
+    # proxy-authenticated user is treated as an admin.
+    proxy_auth_admin_group: str = ""
+    # Where the UI "Sign out" link sends the user in proxy mode (the proxy's
+    # own logout endpoint). Authentik's default outpost sign-out path.
+    proxy_auth_logout_url: str = "/outpost.goauthentik.io/sign_out"
+
+    @property
+    def is_proxy_auth(self) -> bool:
+        return self.auth_mode.strip().lower() == "proxy"
+
     # CORS — comma-separated list of allowed origins
     cors_origins: str = "http://localhost:3000"
 

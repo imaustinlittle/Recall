@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_async_db, AsyncSessionLocal
-from app.deps import get_current_user
+from app.deps import get_current_user, proxy_user_from_headers
 from app.config import settings
 from app import models
 from app.schemas.job import JobOut
@@ -59,23 +59,38 @@ async def list_jobs(
 async def job_progress_ws(
     job_id: uuid.UUID,
     websocket: WebSocket,
-    token: str = Query(...),
+    token: str | None = Query(None),
 ):
     """
     WebSocket endpoint that streams job progress until completion.
-    Requires a valid JWT passed as ?token=<access_token>.
+
+    Auth depends on the configured mode:
+      - local: a valid JWT passed as ?token=<access_token>
+      - proxy: the forward-auth identity headers on the upgrade request
     Uses Redis pub/sub for real-time updates, falls back to DB polling.
     """
     # Authenticate before accepting the connection
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
-        user_id: str = payload.get("sub")
-        if not user_id:
+    user_id: str | None = None
+    if settings.is_proxy_auth:
+        async with AsyncSessionLocal() as db:
+            user = await proxy_user_from_headers(websocket.headers, db)
+        if user is None or not user.is_active:
             await websocket.close(code=4001)
             return
-    except (jwt.PyJWTError, ValueError):
-        await websocket.close(code=4001)
-        return
+        user_id = str(user.id)
+    else:
+        if not token:
+            await websocket.close(code=4001)
+            return
+        try:
+            payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            if not user_id:
+                await websocket.close(code=4001)
+                return
+        except (jwt.PyJWTError, ValueError):
+            await websocket.close(code=4001)
+            return
 
     # Verify the job belongs to this user
     async with AsyncSessionLocal() as db:
