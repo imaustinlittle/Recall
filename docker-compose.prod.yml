@@ -124,15 +124,18 @@ services:
               device_ids: ["1"]
               capabilities: [gpu]
 
-  # ── Ollama (local LLM for meeting summaries) ──────────────────────────────
-  # After first deploy, pull the model once:
+  # ── Ollama (local LLM for meeting summaries) — OPTIONAL ───────────────────
+  # Gated behind the "ollama" compose profile. To run this bundled instance,
+  # set COMPOSE_PROFILES=ollama in your env, then pull the model once:
   #   docker exec recall_ollama ollama pull llama3.1:8b
-  # GPU is optional — drop the deploy.resources block to run on CPU, or set
-  # OLLAMA_BASE_URL to an external Ollama and remove this service entirely.
+  # To use an Ollama you already run elsewhere, leave the profile off and set
+  # OLLAMA_BASE_URL to its address instead.
+  # GPU is optional — drop the deploy.resources block to run on CPU.
   ollama:
     image: ollama/ollama:latest
     container_name: recall_ollama
     restart: unless-stopped
+    profiles: ["ollama"]
     environment:
       - OLLAMA_HOST=0.0.0.0
     volumes:

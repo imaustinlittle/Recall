@@ -147,11 +147,14 @@ services:
       - "traefik.http.routers.recall-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
-  # ── Ollama (local LLM for summarization) ──────────────────────────────────
+  # ── Ollama (local LLM for summarization) — run with --profile ollama ──────
+  # Enable with COMPOSE_PROFILES=ollama (or `docker compose --profile ollama up`),
+  # or point OLLAMA_BASE_URL at an Ollama instance you already run.
   ollama:
     image: ollama/ollama:latest
     container_name: recall_ollama
     restart: unless-stopped
+    profiles: ["ollama"]
     volumes:
       - ollama_data:/root/.ollama
     environment:
