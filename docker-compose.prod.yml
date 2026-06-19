@@ -45,6 +45,11 @@ x-backend-common: &backend-common
     # Blank → every proxy-authenticated user is an app admin.
     PROXY_AUTH_ADMIN_GROUP: ${PROXY_AUTH_ADMIN_GROUP:-}
     PROXY_AUTH_LOGOUT_URL: ${PROXY_AUTH_LOGOUT_URL:-/outpost.goauthentik.io/sign_out}
+    # ── Summarization (Ollama) ────────────────────────────────────────────
+    # Defaults to the bundled ollama service below. Point at an existing
+    # Ollama instance instead by setting OLLAMA_BASE_URL in your env vars.
+    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
 
 services:
 
@@ -119,6 +124,29 @@ services:
               device_ids: ["1"]
               capabilities: [gpu]
 
+  # ── Ollama (local LLM for meeting summaries) ──────────────────────────────
+  # After first deploy, pull the model once:
+  #   docker exec recall_ollama ollama pull llama3.1:8b
+  # GPU is optional — drop the deploy.resources block to run on CPU, or set
+  # OLLAMA_BASE_URL to an external Ollama and remove this service entirely.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: recall_ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - internal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   # ── Frontend ───────────────────────────────────────────────────────────────
   # All traffic enters here. Next.js rewrites /api/*, /media/*, /ws/* to the
   # api container internally — Traefik only needs to know about the frontend.
@@ -178,3 +206,4 @@ volumes:
   redis_data:
   media_files:
   minio_data:
+  ollama_data:
