@@ -6,12 +6,17 @@ PATCH /api/admin/settings — saves overrides to the app_settings table
 Changes to most settings require a container restart to take effect.
 LOG_LEVEL is applied immediately without a restart.
 """
+import asyncio
 import logging
+import os
 from typing import Any
 
+import httpx
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.database import get_async_db
 from app.deps import get_current_admin

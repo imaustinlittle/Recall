@@ -204,6 +204,42 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
             raise self.retry(exc=exc)
 
 
+@celery_app.task(name="self_check")
+def self_check() -> dict:
+    """
+    Lightweight worker-side diagnostics for the admin Settings page.
+    Reports the environment the worker actually sees — it does NOT load models
+    (that would be slow), only checks imports and CUDA availability.
+    """
+    result = {
+        "whisper_model": settings.whisper_model,
+        "whisper_device": settings.whisper_device,
+        "whisper_compute_type": settings.whisper_compute_type,
+        "use_diarization": settings.use_diarization,
+        "cuda_available": False,
+        "cuda_devices": 0,
+        "faster_whisper": False,
+        "pyannote": False,
+    }
+    try:
+        import torch
+        result["cuda_available"] = bool(torch.cuda.is_available())
+        result["cuda_devices"] = int(torch.cuda.device_count())
+    except Exception:
+        pass
+    try:
+        import faster_whisper  # noqa: F401
+        result["faster_whisper"] = True
+    except Exception:
+        pass
+    try:
+        import pyannote.audio  # noqa: F401
+        result["pyannote"] = True
+    except Exception:
+        pass
+    return result
+
+
 @celery_app.task(bind=True, name="summarize_meeting", max_retries=1, default_retry_delay=30)
 def summarize_meeting(self, meeting_id: str):
     """
