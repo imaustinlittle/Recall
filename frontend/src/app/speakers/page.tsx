@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { speakersApi } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { AppShell } from "@/components/layout/AppShell";
 import { Spinner } from "@/components/ui/Spinner";
 import { UsersIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
@@ -69,9 +69,7 @@ export default function SpeakersPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
-
+    <AppShell>
       <main className="mx-auto w-full max-w-[980px] px-[26px] pb-20 pt-10">
         <p className="font-mono text-[12px] font-semibold uppercase tracking-[.1em] text-accent">People</p>
         <h1 className="mt-1.5 font-display text-[34px] font-bold tracking-[-.02em] text-ink">Speakers</h1>
@@ -154,6 +152,6 @@ export default function SpeakersPage() {
           </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

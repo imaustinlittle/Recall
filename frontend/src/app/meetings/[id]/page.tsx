@@ -23,7 +23,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { NotesPanel } from "@/components/notes/NotesPanel";
 import { SummaryPanel, SummaryPending } from "@/components/summary/SummaryPanel";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { AppShell } from "@/components/layout/AppShell";
 import { BackIcon, ChevronIcon, DownloadIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
 
@@ -224,9 +224,7 @@ export default function MeetingPage() {
   const hasTranscript = segments.length > 0;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
-
+    <AppShell>
       <main className="mx-auto w-full max-w-[880px] px-[26px] pb-24 pt-[26px]">
         {/* Sub-header */}
         <div className="mb-[22px] flex items-center gap-4">
@@ -350,7 +348,7 @@ export default function MeetingPage() {
           </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

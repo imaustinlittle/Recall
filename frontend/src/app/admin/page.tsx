@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { adminApi } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { Spinner } from "@/components/ui/Spinner";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { AppShell } from "@/components/layout/AppShell";
 import { AlertIcon, ChevronIcon } from "@/components/ui/icons";
 
 // ── Types mirroring the backend schema ──────────────────────────────────────
@@ -190,9 +190,7 @@ export default function AdminPage() {
   const pendingRestartKeys = saveResult?.restart_required ?? [];
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
-
+    <AppShell>
       <main className="mx-auto w-full max-w-[720px] px-[26px] pb-20 pt-10">
         <p className="font-mono text-[12px] font-semibold uppercase tracking-[.1em] text-accent">
           Configuration
@@ -318,6 +316,6 @@ export default function AdminPage() {
           </button>
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

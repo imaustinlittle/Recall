@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { searchApi } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { AppShell } from "@/components/layout/AppShell";
 import { Spinner } from "@/components/ui/Spinner";
 import { SearchIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
@@ -173,17 +173,16 @@ function SearchContent() {
 
 export default function SearchPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
+    <AppShell>
       <Suspense
         fallback={
-          <div className="flex flex-1 items-center justify-center py-24">
+          <div className="flex h-full items-center justify-center">
             <Spinner size="lg" />
           </div>
         }
       >
         <SearchContent />
       </Suspense>
-    </div>
+    </AppShell>
   );
 }
