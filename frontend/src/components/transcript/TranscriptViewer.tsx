@@ -205,6 +205,8 @@ function EditArea({
 function SpeechBlockCard({
   block,
   isActive,
+  activeSegmentId,
+  activeSegRef,
   editingId,
   editDraft,
   saving,
@@ -221,6 +223,8 @@ function SpeechBlockCard({
 }: {
   block: SpeechBlock;
   isActive: boolean;
+  activeSegmentId: string | null;
+  activeSegRef?: React.Ref<HTMLSpanElement>;
   editingId: string | null;
   editDraft: string;
   saving: boolean;
@@ -300,7 +304,25 @@ function SpeechBlockCard({
           className="cursor-text text-[14.5px] leading-[1.62] text-ink transition-colors hover:text-accent"
           title="Click to edit"
         >
-          {combinedText || <span className="italic text-ink-3">empty</span>}
+          {combinedText ? (
+            block.segments.map((s, i) => {
+              const txt = s.content.trim();
+              if (!txt) return null;
+              const isActiveSeg = s.id === activeSegmentId;
+              return (
+                <span
+                  key={s.id}
+                  ref={isActiveSeg ? activeSegRef : undefined}
+                  className={isActiveSeg ? "rounded bg-accent px-0.5 text-on-accent" : undefined}
+                >
+                  {txt}
+                  {i < block.segments.length - 1 ? " " : ""}
+                </span>
+              );
+            })
+          ) : (
+            <span className="italic text-ink-3">empty</span>
+          )}
         </p>
       )}
 
@@ -322,6 +344,8 @@ function OverlapRow({
   right,
   isActiveLeft,
   isActiveRight,
+  activeSegmentId,
+  activeSegRef,
   editingId,
   editDraft,
   saving,
@@ -339,6 +363,8 @@ function OverlapRow({
   right: SpeechBlock;
   isActiveLeft: boolean;
   isActiveRight: boolean;
+  activeSegmentId: string | null;
+  activeSegRef?: React.Ref<HTMLSpanElement>;
   editingId: string | null;
   editDraft: string;
   saving: boolean;
@@ -352,7 +378,19 @@ function OverlapRow({
   onDraftChange: (v: string) => void;
   onAddNote?: (timestamp: number, body: string, type: NoteType) => Promise<void>;
 }) {
-  const sharedBlockProps = { editingId, editDraft, saving, onSeek, onStartEdit, onCancelEdit, onSaveEdit, onDraftChange, onAddNote };
+  const sharedBlockProps = {
+    activeSegmentId,
+    activeSegRef,
+    editingId,
+    editDraft,
+    saving,
+    onSeek,
+    onStartEdit,
+    onCancelEdit,
+    onSaveEdit,
+    onDraftChange,
+    onAddNote,
+  };
   return (
     <div className="relative">
       <div className="absolute -top-2 left-1/2 z-10 -translate-x-1/2">
@@ -406,7 +444,8 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
   const [search, setSearch] = useState("");
 
   const activeSegment = segments.findLast((s) => s.start_time <= currentTime);
-  const activeRef = useRef<HTMLDivElement>(null);
+  const activeSegmentId = activeSegment?.id ?? null;
+  const activeSegRef = useRef<HTMLSpanElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const blocks = buildBlocks(segments);
@@ -453,9 +492,11 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
     return () => document.removeEventListener("mousedown", handler);
   }, [editingId]);
 
+  // Follow playback — keep the active segment scrolled into view.
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [activeBlock?.key]);
+    if (editingId) return; // don't yank the view while the user is editing
+    activeSegRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activeSegmentId, editingId]);
 
   // Search filter — match against text or speaker name (case-insensitive)
   const q = search.trim().toLowerCase();
@@ -484,6 +525,8 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
   }
 
   const sharedEditProps = {
+    activeSegmentId,
+    activeSegRef,
     editingId,
     editDraft: draft,
     saving,
@@ -546,7 +589,6 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
                   key={item.block.key}
                   block={item.block}
                   isActive={isActive}
-                  blockRef={isActive ? activeRef : undefined}
                   forceNoteOpen={noteOpenKey === item.block.key}
                   onNoteOpened={() => setNoteOpenKey(null)}
                   {...sharedEditProps}
@@ -562,7 +604,6 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
                 right={item.right}
                 isActiveLeft={isActiveLeft}
                 isActiveRight={isActiveRight}
-                activeRef={(isActiveLeft || isActiveRight) ? activeRef : undefined}
                 forceNoteOpenKey={noteOpenKey}
                 onNoteOpened={() => setNoteOpenKey(null)}
                 {...sharedEditProps}

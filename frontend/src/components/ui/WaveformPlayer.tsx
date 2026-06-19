@@ -22,28 +22,58 @@ export function WaveformPlayer({ src, audioRef, seed, onTimeUpdate }: Props) {
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
   const waveRef = useRef<HTMLDivElement>(null);
+  // Browser-recorded WebM reports duration=Infinity until it's been seeked to
+  // the end. While we force that resolution, ignore the bogus time updates.
+  const probingRef = useRef(false);
 
   const heights = bars(seedFrom(seed), BAR_COUNT, 12);
-  const pct = duration ? (current / duration) * 100 : 0;
+  const hasDuration = Number.isFinite(duration) && duration > 0;
+  const pct = hasDuration ? (current / duration) * 100 : 0;
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed;
   }, [speed, audioRef]);
 
+  const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const el = e.currentTarget;
+    if (!Number.isFinite(el.duration)) {
+      // Force the browser to compute the real duration by seeking to the end.
+      probingRef.current = true;
+      el.currentTime = 1e101;
+    } else {
+      setDuration(el.duration);
+    }
+  };
+
+  const handleDurationChange = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const el = e.currentTarget;
+    if (Number.isFinite(el.duration)) setDuration(el.duration);
+  };
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const el = e.currentTarget;
+    if (probingRef.current) {
+      // The probe seek landed; record the now-known duration and rewind.
+      probingRef.current = false;
+      if (Number.isFinite(el.duration)) setDuration(el.duration);
+      el.currentTime = 0;
+      return;
+    }
+    setCurrent(el.currentTime);
+    onTimeUpdate(el.currentTime);
+  };
+
   const togglePlay = () => {
     const el = audioRef.current;
     if (!el) return;
-    if (el.paused) {
-      el.play().catch(() => {});
-    } else {
-      el.pause();
-    }
+    if (el.paused) el.play().catch(() => {});
+    else el.pause();
   };
 
   const seekFromEvent = (clientX: number) => {
     const el = audioRef.current;
     const rect = waveRef.current?.getBoundingClientRect();
-    if (!el || !rect || !el.duration) return;
+    if (!el || !rect || !Number.isFinite(el.duration) || el.duration <= 0) return;
     const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     el.currentTime = frac * el.duration;
     setCurrent(el.currentTime);
@@ -56,12 +86,9 @@ export function WaveformPlayer({ src, audioRef, seed, onTimeUpdate }: Props) {
         ref={audioRef}
         src={src}
         preload="metadata"
-        onTimeUpdate={(e) => {
-          const el = e.currentTarget;
-          setCurrent(el.currentTime);
-          onTimeUpdate(el.currentTime);
-        }}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={handleLoadedMetadata}
+        onDurationChange={handleDurationChange}
+        onTimeUpdate={handleTimeUpdate}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
@@ -80,7 +107,9 @@ export function WaveformPlayer({ src, audioRef, seed, onTimeUpdate }: Props) {
           <div
             ref={waveRef}
             onClick={(e) => seekFromEvent(e.clientX)}
-            className="relative flex h-[46px] cursor-pointer items-center gap-[1.5px]"
+            className={`relative flex h-[46px] items-center gap-[1.5px] ${
+              hasDuration ? "cursor-pointer" : "cursor-default"
+            }`}
           >
             {heights.map((h, i) => {
               const barPct = (i / BAR_COUNT) * 100;
@@ -116,7 +145,7 @@ export function WaveformPlayer({ src, audioRef, seed, onTimeUpdate }: Props) {
                 </button>
               ))}
             </div>
-            <span>{formatTime(duration)}</span>
+            <span>{hasDuration ? formatTime(duration) : "--:--"}</span>
           </div>
         </div>
       </div>
