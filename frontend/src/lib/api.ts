@@ -257,6 +257,19 @@ export function exportTranscript(
 }
 
 // ── Admin ──────────────────────────────────────────────────────────────────
+export type DiagStatus = "ok" | "warn" | "fail" | "skip";
+export interface DiagCheck {
+  key: string;
+  label: string;
+  section: string;
+  status: DiagStatus;
+  detail: string;
+}
+export interface DiagnosticsOut {
+  checks: DiagCheck[];
+  summary: { ok: number; warn: number; fail: number };
+}
+
 export const adminApi = {
   getSettings: () => request("/admin/settings"),
   patchSettings: (body: Record<string, string>) =>
@@ -264,6 +277,7 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  diagnostics: () => request<DiagnosticsOut>("/admin/diagnostics"),
 };
 
 // ── Search ─────────────────────────────────────────────────────────────────

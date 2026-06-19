@@ -273,3 +273,155 @@ async def patch_settings(
         "saved": list(body.keys()),
         "restart_required": needs_restart,
     }
+
+
+# ── Diagnostics ──────────────────────────────────────────────────────────────
+# Live "does it actually work?" checks for the config-driven integrations.
+# status: "ok" | "warn" | "fail" | "skip"
+
+def _diag(key: str, label: str, section: str, status: str, detail: str) -> dict:
+    return {"key": key, "label": label, "section": section, "status": status, "detail": detail}
+
+
+async def _check_database(db: AsyncSession) -> dict:
+    try:
+        await db.execute(text("SELECT 1"))
+        return _diag("database", "Database", "App", "ok", "Connected")
+    except Exception as e:
+        return _diag("database", "Database", "App", "fail", f"{type(e).__name__}: {e}")
+
+
+async def _check_redis() -> dict:
+    try:
+        async with aioredis.from_url(settings.redis_url) as r:
+            await r.ping()
+        return _diag("redis", "Redis / job queue", "App", "ok", "Reachable")
+    except Exception as e:
+        return _diag("redis", "Redis / job queue", "App", "fail", f"{type(e).__name__}: {e}")
+
+
+async def _check_ollama() -> dict:
+    base = (settings.ollama_base_url or "").rstrip("/")
+    want = settings.ollama_model or ""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            resp = await c.get(f"{base}/api/tags")
+            resp.raise_for_status()
+            names = [m.get("name", "") for m in resp.json().get("models", [])]
+        base_want = want.split(":")[0]
+        if any(n == want or n.split(":")[0] == base_want for n in names):
+            return _diag("ollama", "Ollama", "Summarization", "ok", f"Reachable; model '{want}' is available")
+        return _diag(
+            "ollama", "Ollama", "Summarization", "warn",
+            f"Reachable, but model '{want}' is not pulled. Run: ollama pull {want}",
+        )
+    except Exception as e:
+        return _diag("ollama", "Ollama", "Summarization", "fail", f"Unreachable at {base or '(unset)'}: {type(e).__name__}")
+
+
+async def _check_huggingface() -> dict:
+    token = settings.huggingface_token or ""
+    if not token:
+        detail = "No token set" + (" — diarization is on and needs one" if settings.use_diarization else "")
+        status = "warn" if settings.use_diarization else "skip"
+        return _diag("huggingface", "HuggingFace token", "Transcription", status, detail)
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as c:
+            resp = await c.get(
+                "https://huggingface.co/api/whoami-v2",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if resp.status_code == 200:
+            return _diag("huggingface", "HuggingFace token", "Transcription", "ok", f"Valid (user: {resp.json().get('name', '?')})")
+        if resp.status_code == 401:
+            return _diag("huggingface", "HuggingFace token", "Transcription", "fail", "Token rejected (401 Unauthorized)")
+        return _diag("huggingface", "HuggingFace token", "Transcription", "warn", f"Unexpected status {resp.status_code}")
+    except Exception as e:
+        return _diag("huggingface", "HuggingFace token", "Transcription", "fail", f"{type(e).__name__}: {e}")
+
+
+def _worker_self_check() -> dict | None:
+    """Dispatch the worker self-check task and wait briefly for a reply."""
+    from app.workers.tasks import self_check
+    try:
+        return self_check.apply_async(queue="default").get(timeout=6)
+    except Exception:
+        return None
+
+
+async def _check_workers() -> dict:
+    res = await run_in_threadpool(_worker_self_check)
+    if not res:
+        return _diag("workers", "Transcription worker", "Transcription", "fail", "No worker responded within 6s — is the worker container running?")
+
+    status = "ok"
+    bits: list[str] = []
+
+    if res.get("whisper_device") == "cuda":
+        if res.get("cuda_available"):
+            bits.append(f"CUDA OK ({res.get('cuda_devices', 0)} GPU)")
+        else:
+            status = "fail"
+            bits.append("device=cuda but no GPU visible to the worker")
+    else:
+        bits.append("device=cpu")
+
+    if not res.get("faster_whisper"):
+        status = "fail"
+        bits.append("faster-whisper not importable")
+
+    bits.append(f"model={res.get('whisper_model')}")
+
+    if res.get("use_diarization"):
+        if res.get("pyannote"):
+            bits.append("pyannote installed")
+        else:
+            status = "warn"
+            bits.append("diarization ON but pyannote not installed")
+
+    return _diag("workers", "Transcription worker", "Transcription", status, "; ".join(bits))
+
+
+def _check_storage_sync() -> dict:
+    if settings.storage_backend == "local":
+        try:
+            os.makedirs(settings.media_root, exist_ok=True)
+            probe = os.path.join(settings.media_root, ".diag_write_test")
+            with open(probe, "w") as f:
+                f.write("ok")
+            os.remove(probe)
+            return _diag("storage", "Storage", "Storage", "ok", f"Local path writable: {settings.media_root}")
+        except Exception as e:
+            return _diag("storage", "Storage", "Storage", "fail", f"Cannot write to {settings.media_root}: {type(e).__name__}")
+    return _diag("storage", "Storage", "Storage", "skip", f"Backend '{settings.storage_backend}' — no automated check")
+
+
+@router.get("/diagnostics")
+async def diagnostics(
+    db: AsyncSession = Depends(get_async_db),
+    _: models.User = Depends(get_current_admin),
+):
+    """Run live health checks against the config-driven integrations."""
+    checks = await asyncio.gather(
+        _check_database(db),
+        _check_redis(),
+        _check_workers(),
+        _check_ollama(),
+        _check_huggingface(),
+        run_in_threadpool(_check_storage_sync),
+        return_exceptions=True,
+    )
+
+    out: list[dict] = []
+    for c in checks:
+        if isinstance(c, Exception):
+            out.append(_diag("unknown", "Check failed", "App", "fail", f"{type(c).__name__}: {c}"))
+        else:
+            out.append(c)
+
+    summary = {
+        "ok": sum(1 for c in out if c["status"] == "ok"),
+        "warn": sum(1 for c in out if c["status"] == "warn"),
+        "fail": sum(1 for c in out if c["status"] == "fail"),
+    }
+    return {"checks": out, "summary": summary}

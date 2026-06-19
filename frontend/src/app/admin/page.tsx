@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { adminApi } from "@/lib/api";
+import { adminApi, DiagCheck, DiagStatus } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { Spinner } from "@/components/ui/Spinner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -54,6 +54,100 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "accent" | 
     >
       {children}
     </span>
+  );
+}
+
+// ── Diagnostics ──────────────────────────────────────────────────────────────
+
+const DIAG_COLORS: Record<DiagStatus, string> = {
+  ok: "#1F9D6B",
+  warn: "#C8862A",
+  fail: "#E0533A",
+  skip: "var(--ink-3)",
+};
+const DIAG_LABELS: Record<DiagStatus, string> = {
+  ok: "OK",
+  warn: "Warn",
+  fail: "Fail",
+  skip: "Skip",
+};
+
+function DiagRow({ check }: { check: DiagCheck }) {
+  const color = DIAG_COLORS[check.status];
+  return (
+    <div className="flex items-start gap-3 border-b border-line px-[22px] py-[14px] last:border-b-0">
+      <span
+        className="mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full px-2 py-[3px] font-mono text-[10px] font-semibold uppercase tracking-[.06em]"
+        style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
+      >
+        {DIAG_LABELS[check.status]}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-semibold text-ink">{check.label}</p>
+        <p className="mt-0.5 break-words font-mono text-[12px] text-ink-2">{check.detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function Diagnostics() {
+  const [checks, setChecks] = useState<DiagCheck[] | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await adminApi.diagnostics();
+      setChecks(res.checks);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to run diagnostics");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <section className="overflow-hidden rounded-[16px] border border-line bg-surface shadow-card-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-surface-2 px-[22px] py-[14px]">
+        <div>
+          <h2 className="font-mono text-[11.5px] font-semibold uppercase tracking-[.1em] text-ink-2">Diagnostics</h2>
+          <p className="mt-0.5 text-[12px] text-ink-3">Test database, Redis, worker, Ollama, HuggingFace, and storage.</p>
+        </div>
+        <button
+          onClick={run}
+          disabled={running}
+          className="inline-flex shrink-0 items-center gap-2 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 transition-colors hover:text-ink disabled:opacity-60"
+        >
+          {running && <Spinner size="sm" />}
+          {running ? "Testing…" : checks ? "Re-run tests" : "Run tests"}
+        </button>
+      </div>
+
+      {error && (
+        <p
+          className="px-[22px] py-3 text-[13px]"
+          style={{ background: "color-mix(in srgb, #E0533A 10%, transparent)", color: "#E0533A" }}
+        >
+          {error}
+        </p>
+      )}
+
+      {checks ? (
+        <div>
+          {checks.map((c) => (
+            <DiagRow key={c.key} check={c} />
+          ))}
+        </div>
+      ) : (
+        !error && (
+          <p className="px-[22px] py-5 text-[13px] text-ink-3">
+            Run the tests to verify each integration is reachable and configured correctly.
+          </p>
+        )
+      )}
+    </section>
   );
 }
 
@@ -246,6 +340,10 @@ export default function AdminPage() {
             {saveError}
           </div>
         )}
+
+        <div className="mt-6">
+          <Diagnostics />
+        </div>
 
         {loadError ? (
           <div
