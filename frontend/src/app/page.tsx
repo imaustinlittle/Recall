@@ -3,14 +3,14 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { meetings as meetingsApi } from "@/lib/api";
-import { Meeting, MeetingListOut } from "@/lib/types";
+import { meetings as meetingsApi, foldersApi } from "@/lib/api";
+import { Meeting, MeetingListOut, Folder, TagCount } from "@/lib/types";
 import { useAuth } from "@/lib/useAuth";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { AppShell } from "@/components/layout/AppShell";
-import { PlusIcon, WaveIcon, TrashIcon, CheckIcon } from "@/components/ui/icons";
+import { PlusIcon, WaveIcon, TrashIcon, CheckIcon, FolderIcon, TagIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
 
 const LIMIT = 30;
@@ -36,10 +36,14 @@ function buildParams(
   dateParam: string | null,
   monthParam: string | null,
   status: string,
-  page: number
+  page: number,
+  folder: string | null,
+  tag: string | null
 ) {
   const p: Record<string, string | number> = { page, limit: LIMIT };
   if (status) p.status = status;
+  if (folder) p.folder = folder;
+  if (tag) p.tag = tag;
   if (dateParam) {
     p.date_from = dateParam;
     p.date_to = dateParam;
@@ -74,6 +78,8 @@ function DashboardContent() {
 
   const dateParam = searchParams.get("date");
   const monthParam = searchParams.get("month");
+  const folderParam = searchParams.get("folder");
+  const tagParam = searchParams.get("tag");
   const hasDateFilter = !!(dateParam || monthParam);
 
   const [status, setStatus] = useState("");
@@ -84,14 +90,28 @@ function DashboardContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // Folders & tags
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [tags, setTags] = useState<TagCount[]>([]);
+
   // Bulk-management state
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkMoving, setBulkMoving] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
+
+  // Folder/tag metadata for chips + bulk-move (refreshed on user change).
+  const loadMeta = useCallback(() => {
+    if (!user) return;
+    foldersApi.list().then(setFolders).catch(() => {});
+    meetingsApi.tags().then(setTags).catch(() => {});
+  }, [user]);
+
+  useEffect(() => { loadMeta(); }, [loadMeta]);
 
   // Load page 1 whenever the filter changes.
   useEffect(() => {
@@ -101,25 +121,50 @@ function DashboardContent() {
     setSelectMode(false);
     setSelected(new Set());
     meetingsApi
-      .list(buildParams(dateParam, monthParam, status, 1))
+      .list(buildParams(dateParam, monthParam, status, 1, folderParam, tagParam))
       .then((d) => {
         const data = d as MeetingListOut;
         setItems(data.items);
         setTotal(data.total);
       })
       .finally(() => setLoading(false));
-  }, [user, dateParam, monthParam, status]);
+  }, [user, dateParam, monthParam, status, folderParam, tagParam]);
 
   const loadMore = async () => {
     const next = page + 1;
     setLoadingMore(true);
     try {
-      const d = (await meetingsApi.list(buildParams(dateParam, monthParam, status, next))) as MeetingListOut;
+      const d = (await meetingsApi.list(buildParams(dateParam, monthParam, status, next, folderParam, tagParam))) as MeetingListOut;
       setItems((prev) => [...prev, ...d.items]);
       setTotal(d.total);
       setPage(next);
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const activeFolder = folderParam && folderParam !== "none"
+    ? folders.find((f) => f.id === folderParam)
+    : null;
+
+  const handleBulkMove = async (folderId: string | null) => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkMoving(true);
+    try {
+      await Promise.allSettled(ids.map((id) => meetingsApi.update(id, { folder_id: folderId })));
+      // If we're viewing a folder, moved-out meetings should drop from the list.
+      if (folderParam) {
+        const moved = new Set(ids);
+        setItems((prev) => prev.filter((m) => !moved.has(m.id)));
+        setTotal((t) => Math.max(0, t - moved.size));
+      } else {
+        setItems((prev) => prev.map((m) => (selected.has(m.id) ? { ...m, folder_id: folderId } : m)));
+      }
+      loadMeta();
+      exitSelect();
+    } finally {
+      setBulkMoving(false);
     }
   };
 
@@ -188,9 +233,22 @@ function DashboardContent() {
     ? new Date(monthParam + "-01T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : null;
 
-  const subtitle = hasDateFilter
+  const folderLabel = activeFolder ? activeFolder.name : folderParam === "none" ? "Unfiled" : null;
+
+  const subtitle = folderLabel
+    ? `${total} in ${folderLabel}`
+    : tagParam
+    ? `${total} tagged "${tagParam}"`
+    : hasDateFilter
     ? `${total} ${filterLabel}`
     : `${total} recording${total === 1 ? "" : "s"} archived`;
+
+  const dropParam = (key: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete(key);
+    const qs = next.toString();
+    router.push(qs ? `/?${qs}` : "/");
+  };
 
   const hasMore = items.length < total;
 
@@ -218,11 +276,35 @@ function DashboardContent() {
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         {filterLabel && (
           <button
-            onClick={() => router.push("/")}
+            onClick={() => dropParam(dateParam ? "date" : "month")}
             className="inline-flex items-center gap-1.5 rounded-full bg-accent-weak px-3 py-1.5 text-[12.5px] font-semibold text-accent"
             title="Clear date filter"
           >
             {filterLabel}
+            <span aria-hidden>✕</span>
+          </button>
+        )}
+
+        {folderLabel && (
+          <button
+            onClick={() => dropParam("folder")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent-weak px-3 py-1.5 text-[12.5px] font-semibold text-accent"
+            title="Clear folder filter"
+          >
+            <FolderIcon size={13} />
+            {folderLabel}
+            <span aria-hidden>✕</span>
+          </button>
+        )}
+
+        {tagParam && (
+          <button
+            onClick={() => dropParam("tag")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent-weak px-3 py-1.5 text-[12.5px] font-semibold text-accent"
+            title="Clear tag filter"
+          >
+            <TagIcon size={13} />
+            {tagParam}
             <span aria-hidden>✕</span>
           </button>
         )}
@@ -258,14 +340,49 @@ function DashboardContent() {
         )}
       </div>
 
+      {/* Tag filter row */}
+      {!tagParam && tags.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <TagIcon size={14} className="text-ink-3" />
+          {tags.slice(0, 16).map((t) => (
+            <button
+              key={t.tag}
+              onClick={() => router.push(`/?tag=${encodeURIComponent(t.tag)}`)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-2 transition-colors hover:border-accent hover:text-accent"
+            >
+              {t.tag}
+              <span className="font-mono text-[10.5px] text-ink-3">{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selectMode && (
-        <div className="mb-3 flex items-center gap-3 rounded-[12px] border border-accent-line bg-accent-weak px-4 py-2.5">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[12px] border border-accent-line bg-accent-weak px-4 py-2.5">
           <button onClick={toggleSelectAll} className="text-[13px] font-semibold text-accent">
             {allLoadedSelected ? "Clear all" : "Select all"}
           </button>
           <span className="font-mono text-[12.5px] text-ink-2">{selected.size} selected</span>
           <div className="flex-1" />
+
+          {/* Move to folder */}
+          <select
+            value=""
+            disabled={selected.size === 0 || bulkMoving}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v) handleBulkMove(v === "none" ? null : v);
+            }}
+            className="rounded-[10px] border border-line bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink-2 transition-colors hover:text-ink disabled:opacity-50"
+          >
+            <option value="">Move to…</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+            <option value="none">Unfiled</option>
+          </select>
+
           <button
             onClick={handleBulkDelete}
             disabled={selected.size === 0 || bulkDeleting}

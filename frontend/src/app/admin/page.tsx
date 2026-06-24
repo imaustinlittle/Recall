@@ -15,7 +15,7 @@ interface SettingEntry {
   label: string;
   section: string;
   description: string;
-  type: "select" | "bool" | "text" | "number" | "password";
+  type: "select" | "bool" | "text" | "number" | "float" | "password";
   options?: string[];
   restart_required: boolean;
   current_value: string;
@@ -200,9 +200,11 @@ function SettingControl({
     );
   }
 
+  const isNumeric = entry.type === "number" || entry.type === "float";
   return (
     <input
-      type={entry.type === "password" ? "password" : entry.type === "number" ? "number" : "text"}
+      type={entry.type === "password" ? "password" : isNumeric ? "number" : "text"}
+      step={entry.type === "float" ? "0.01" : undefined}
       value={value}
       placeholder={entry.type === "password" ? "Enter token…" : undefined}
       autoComplete={entry.type === "password" ? "off" : undefined}

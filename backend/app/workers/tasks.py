@@ -1,10 +1,11 @@
 import uuid
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import redis as redis_client
+from sqlalchemy import func
 
 from app.workers.celery_app import celery_app
 from app.config import settings
@@ -122,6 +123,26 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
             db.commit()
             _publish_job(job)
 
+            # Compute per-speaker voice embeddings + load the owner's saved
+            # voice profiles for cross-meeting matching (diarization only).
+            speaker_embeddings: dict[str, list[float]] = {}
+            voice_profiles: list[models.VoiceProfile] = []
+            if settings.use_diarization:
+                try:
+                    from app.services.voice import compute_speaker_embeddings
+                    speaker_embeddings = compute_speaker_embeddings(wav_path, raw_segments)
+                    owner_id = db.query(models.Meeting.user_id).filter_by(
+                        id=uuid.UUID(meeting_id)
+                    ).scalar()
+                    if speaker_embeddings and owner_id is not None:
+                        voice_profiles = (
+                            db.query(models.VoiceProfile)
+                            .filter_by(user_id=owner_id)
+                            .all()
+                        )
+                except Exception:
+                    logger.exception("[process_meeting] voice embedding step failed (non-fatal)")
+
             unique_labels = sorted(
                 {s["speaker_label"] for s in raw_segments if s.get("speaker_label")}
             )
@@ -134,6 +155,14 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
                     display_name=f"Speaker {i + 1}",
                     color_hex=SPEAKER_COLORS[i % len(SPEAKER_COLORS)],
                 )
+                emb = speaker_embeddings.get(label)
+                if emb is not None:
+                    speaker.embedding = emb
+                    matched = _match_voice_profile(emb, voice_profiles)
+                    if matched is not None:
+                        speaker.display_name = matched.name
+                        speaker.voice_profile_id = matched.id
+                        logger.info(f"[process_meeting] {label} auto-matched to '{matched.name}'")
                 db.add(speaker)
                 db.flush()
                 speaker_map[label] = speaker
@@ -177,8 +206,9 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
                 f"segments={len(raw_segments)}  speakers={len(speaker_map)}"
             )
 
-            # Automatically kick off summarization
+            # Automatically kick off summarization and chat indexing
             summarize_meeting.apply_async(args=[meeting_id], queue="default")
+            embed_meeting.apply_async(args=[meeting_id], queue="default")
 
         except Exception as exc:
             logger.exception(f"[process_meeting] FAILED  meeting={meeting_id}")
@@ -202,6 +232,164 @@ def process_meeting(self, meeting_id: str, media_file_id: str):
                 db2.commit()
 
             raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, name="embed_meeting", max_retries=2, default_retry_delay=30)
+def embed_meeting(self, meeting_id: str):
+    """
+    Build retrieval chunks for a meeting's transcript and store their vector
+    embeddings (for transcript chat / RAG). Idempotent: clears and rebuilds
+    this meeting's chunks each run, so it's safe to re-index after edits.
+    """
+    logger.info(f"[embed_meeting] start  meeting={meeting_id}")
+    try:
+        from app.services.embeddings import chunk_segments, embed_texts
+
+        with get_sync_session() as db:
+            mid = uuid.UUID(meeting_id)
+            segments = (
+                db.query(models.TranscriptSegment)
+                .filter_by(meeting_id=mid)
+                .order_by(models.TranscriptSegment.segment_index)
+                .all()
+            )
+            if not segments:
+                logger.warning(f"[embed_meeting] no segments for meeting {meeting_id}")
+                return {"chunks": 0}
+
+            speaker_map = {
+                sp.id: sp
+                for sp in db.query(models.Speaker).filter_by(meeting_id=mid).all()
+            }
+            labeled = []
+            for seg in segments:
+                sp = speaker_map.get(seg.speaker_id)
+                name = (sp.display_name or sp.label) if sp else "Unknown"
+                labeled.append({
+                    "speaker": name,
+                    "start": seg.start_time,
+                    "end": seg.end_time,
+                    "text": seg.content,
+                })
+
+            chunks = chunk_segments(labeled)
+            if not chunks:
+                return {"chunks": 0}
+
+            vectors = embed_texts([c["content"] for c in chunks])
+
+            # Replace any existing chunks for this meeting
+            db.query(models.TranscriptChunk).filter_by(meeting_id=mid).delete()
+            for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
+                db.add(models.TranscriptChunk(
+                    meeting_id=mid,
+                    chunk_index=i,
+                    content=chunk["content"],
+                    start_time=chunk["start_time"],
+                    end_time=chunk["end_time"],
+                    embedding=vec,
+                ))
+            db.commit()
+
+        logger.info(f"[embed_meeting] complete  meeting={meeting_id}  chunks={len(chunks)}")
+        return {"chunks": len(chunks)}
+
+    except Exception as exc:
+        logger.exception(f"[embed_meeting] FAILED  meeting={meeting_id}")
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(name="apply_retention")
+def apply_retention() -> dict:
+    """
+    Periodic cleanup of recordings older than the configured retention window.
+
+    Controlled by two settings (env or admin UI):
+      retention_mode: "off" | "audio_only" | "all"
+      retention_days: age threshold in days (0 disables)
+
+    Meetings with retention_exempt=True are always skipped. Age is measured from
+    recorded_at when present, otherwise created_at.
+    """
+    mode = (settings.retention_mode or "off").strip().lower()
+    days = int(settings.retention_days or 0)
+
+    if mode == "off" or days <= 0:
+        return {"mode": mode, "days": days, "skipped": "disabled"}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    media_deleted = 0
+    meetings_deleted = 0
+
+    from app.services.storage import delete_file
+
+    with get_sync_session() as db:
+        # COALESCE(recorded_at, created_at) < cutoff, and not exempt.
+        candidates = (
+            db.query(models.Meeting)
+            .filter(
+                models.Meeting.retention_exempt.is_(False),
+                func.coalesce(models.Meeting.recorded_at, models.Meeting.created_at) < cutoff,
+            )
+            .all()
+        )
+
+        for meeting in candidates:
+            if mode == "all":
+                # Cascade removes media/segments/notes/speakers/jobs rows; remove
+                # the on-disk files first so we don't orphan them.
+                for media in list(meeting.media_files):
+                    _safe_delete(delete_file, media.file_path)
+                    media_deleted += 1
+                db.delete(meeting)
+                meetings_deleted += 1
+            elif mode == "audio_only":
+                # Drop the audio but keep the transcript/notes/summary. Remove the
+                # MediaFile rows so the UI no longer offers a (now-broken) player.
+                if meeting.media_files:
+                    for media in list(meeting.media_files):
+                        _safe_delete(delete_file, media.file_path)
+                        media_deleted += 1
+                        db.delete(media)
+
+        db.commit()
+
+    result = {
+        "mode": mode,
+        "days": days,
+        "media_deleted": media_deleted,
+        "meetings_deleted": meetings_deleted,
+        "candidates": len(candidates),
+    }
+    logger.info(f"[apply_retention] {result}")
+    return result
+
+
+def _safe_delete(delete_fn, file_path: str) -> None:
+    try:
+        delete_fn(file_path)
+    except Exception as exc:
+        logger.warning(f"[apply_retention] could not delete {file_path}: {exc}")
+
+
+def _match_voice_profile(embedding, profiles):
+    """Return the best-matching VoiceProfile if similarity clears the threshold."""
+    if not profiles:
+        return None
+    from app.services.voice import cosine_similarity
+
+    best = None
+    best_sim = -1.0
+    for p in profiles:
+        if p.embedding is None:
+            continue
+        sim = cosine_similarity(embedding, list(p.embedding))
+        if sim > best_sim:
+            best_sim = sim
+            best = p
+    if best is not None and best_sim >= settings.voice_match_threshold:
+        return best
+    return None
 
 
 @celery_app.task(name="self_check")

@@ -29,6 +29,11 @@ sync_engine = create_engine(
     max_overflow=10,
 )
 
+# Note on pgvector: the `pgvector.sqlalchemy.Vector` column type serializes
+# values to/from text in its own bind/result processors, so it works across
+# asyncpg and psycopg2 without registering a driver-level codec. (Registering
+# the binary asyncpg codec would actually conflict with that text path.)
+
 SyncSessionLocal = sessionmaker(bind=sync_engine, expire_on_commit=False)
 
 

@@ -16,6 +16,7 @@ class SpeakerOut(BaseModel):
     display_name: Optional[str]
     color_hex: str
     avatar_url: Optional[str]
+    voice_profile_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
 

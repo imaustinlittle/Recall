@@ -86,15 +86,19 @@ export const auth = {
 
 // ── Meetings ───────────────────────────────────────────────────────────────
 export const meetings = {
-  list: (params?: { page?: number; limit?: number; status?: string; date_from?: string; date_to?: string }) => {
+  list: (params?: { page?: number; limit?: number; status?: string; date_from?: string; date_to?: string; folder?: string; tag?: string }) => {
     const q = new URLSearchParams();
     if (params?.page)      q.set("page", String(params.page));
     if (params?.limit)     q.set("limit", String(params.limit));
     if (params?.status)    q.set("status", params.status);
     if (params?.date_from) q.set("date_from", params.date_from);
     if (params?.date_to)   q.set("date_to", params.date_to);
+    if (params?.folder)    q.set("folder", params.folder);
+    if (params?.tag)       q.set("tag", params.tag);
     return request(`/meetings?${q}`);
   },
+
+  tags: () => request<{ tag: string; count: number }[]>("/meetings/tags"),
 
   create: (body: { title?: string; description?: string; tags?: string[] }) =>
     request("/meetings", { method: "POST", body: JSON.stringify(body) }),
@@ -286,10 +290,127 @@ export const searchApi = {
     request(`/search?q=${encodeURIComponent(q)}&limit=${limit}`),
 };
 
+// ── Transcript chat ────────────────────────────────────────────────────────
+import type { ChatThread, ChatCitation } from "./types";
+
+export const chatApi = {
+  get: (meetingId: string) => request<ChatThread>(`/meetings/${meetingId}/chat`),
+
+  index: (meetingId: string) =>
+    request<{ status: string }>(`/meetings/${meetingId}/chat/index`, { method: "POST" }),
+
+  clear: (meetingId: string) =>
+    request(`/meetings/${meetingId}/chat`, { method: "DELETE" }),
+};
+
+/**
+ * Ask a question and stream the answer via Server-Sent Events.
+ * Returns an abort function. Callbacks fire as tokens arrive.
+ */
+export function streamChat(
+  meetingId: string,
+  message: string,
+  handlers: {
+    onToken: (text: string) => void;
+    onDone: (citations: ChatCitation[]) => void;
+    onError: (detail: string) => void;
+  }
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/meetings/${meetingId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+        credentials: "include",
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if (!controller.signal.aborted) handlers.onError("Network error");
+      return;
+    }
+
+    if (!res.ok || !res.body) {
+      let detail = `HTTP ${res.status}`;
+      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
+      handlers.onError(detail);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE frames are separated by a blank line.
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          const line = frame.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const payload = JSON.parse(line.slice(5).trim());
+          if (payload.type === "token") handlers.onToken(payload.text);
+          else if (payload.type === "done") handlers.onDone(payload.citations ?? []);
+          else if (payload.type === "error") handlers.onError(payload.detail ?? "Error");
+        }
+      }
+    } catch {
+      if (!controller.signal.aborted) handlers.onError("Stream interrupted");
+    }
+  })();
+
+  return () => controller.abort();
+}
+
+// ── Folders ────────────────────────────────────────────────────────────────
+import type { Folder } from "./types";
+
+export const foldersApi = {
+  list: () => request<Folder[]>("/folders"),
+
+  create: (body: { name: string; color_hex?: string }) =>
+    request<Folder>("/folders", { method: "POST", body: JSON.stringify(body) }),
+
+  update: (id: string, body: { name?: string; color_hex?: string }) =>
+    request<Folder>(`/folders/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  delete: (id: string) => request(`/folders/${id}`, { method: "DELETE" }),
+};
+
 // ── Global speakers ────────────────────────────────────────────────────────
 export const speakersApi = {
   listAll: () => request("/speakers"),
   meetingsForSpeaker: (name: string) =>
     request(`/speakers/${encodeURIComponent(name)}/meetings`),
+};
+
+// ── Voice profiles ─────────────────────────────────────────────────────────
+import type { VoiceProfile } from "./types";
+
+export const voiceProfilesApi = {
+  list: () => request<VoiceProfile[]>("/voice-profiles"),
+
+  enroll: (speaker_id: string, name: string) =>
+    request<VoiceProfile>("/voice-profiles", {
+      method: "POST",
+      body: JSON.stringify({ speaker_id, name }),
+    }),
+
+  rename: (id: string, name: string) =>
+    request<VoiceProfile>(`/voice-profiles/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+
+  delete: (id: string) => request(`/voice-profiles/${id}`, { method: "DELETE" }),
 };
 

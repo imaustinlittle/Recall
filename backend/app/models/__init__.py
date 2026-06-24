@@ -8,6 +8,9 @@ from .note import Note, NoteType
 from .calendar import CalendarEvent
 from .job import Job, JobStatus, JobType
 from .app_setting import AppSetting
+from .folder import Folder
+from .chat import TranscriptChunk, ChatMessage, ChatRole, EMBED_DIM
+from .voice import VoiceProfile, VOICE_EMBED_DIM
 
 __all__ = [
     "Base",
@@ -20,4 +23,7 @@ __all__ = [
     "CalendarEvent",
     "Job", "JobStatus", "JobType",
     "AppSetting",
+    "Folder",
+    "TranscriptChunk", "ChatMessage", "ChatRole", "EMBED_DIM",
+    "VoiceProfile", "VOICE_EMBED_DIM",
 ]

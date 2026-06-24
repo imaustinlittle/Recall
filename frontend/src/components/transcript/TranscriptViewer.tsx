@@ -14,6 +14,7 @@ interface Props {
   onSeek: (t: number) => void;
   onSegmentUpdate: (segmentId: string, content: string) => Promise<void>;
   onSpeakerRename: (speakerId: string, name: string) => Promise<void>;
+  onSaveVoiceProfile?: (speakerId: string, name: string) => Promise<void>;
   onAddNote?: (timestamp: number, body: string, type: NoteType) => Promise<void>;
 }
 
@@ -434,6 +435,7 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
   onSeek,
   onSegmentUpdate,
   onSpeakerRename,
+  onSaveVoiceProfile,
   onAddNote,
 }, ref) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -550,6 +552,9 @@ export const TranscriptViewer = forwardRef<TranscriptViewerHandle, Props>(functi
               forceEdit={editSpeakerId === sp.id}
               onForceEditDone={() => setEditSpeakerId(null)}
               onRename={(name) => onSpeakerRename(sp.id, name)}
+              onSaveVoiceProfile={
+                onSaveVoiceProfile ? (name) => onSaveVoiceProfile(sp.id, name) : undefined
+              }
             />
           ))}
         </div>
@@ -623,14 +628,17 @@ function SpeakerChip({
   forceEdit,
   onForceEditDone,
   onRename,
+  onSaveVoiceProfile,
 }: {
   speaker: Speaker;
   forceEdit?: boolean;
   onForceEditDone?: () => void;
   onRename: (name: string) => Promise<void>;
+  onSaveVoiceProfile?: (name: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(speaker.display_name || speaker.label);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     if (forceEdit && !editing) {
@@ -643,6 +651,22 @@ function SpeakerChip({
     setEditing(false);
     if (draft.trim() && draft !== (speaker.display_name || speaker.label)) {
       await onRename(draft.trim());
+    }
+  };
+
+  const matched = !!speaker.voice_profile_id;
+  const named = (speaker.display_name || "").trim();
+  // Only offer enrollment once the speaker has a real name (not "Speaker N").
+  const canEnroll = !!onSaveVoiceProfile && !!named && !/^speaker \d+$/i.test(named);
+
+  const handleSaveProfile = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onSaveVoiceProfile || savingProfile) return;
+    setSavingProfile(true);
+    try {
+      await onSaveVoiceProfile(named);
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -660,13 +684,43 @@ function SpeakerChip({
   }
 
   return (
-    <button
-      onClick={() => setEditing(true)}
-      className="inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border border-line bg-surface py-[5px] pl-[9px] pr-3 text-[12.5px] font-semibold text-ink transition-colors hover:border-line-strong"
-      title="Click to rename speaker (Q)"
-    >
-      <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ backgroundColor: speaker.color_hex }} />
-      {speaker.display_name || speaker.label}
-    </button>
+    <span className="group inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line bg-surface py-[5px] pl-[9px] pr-2 text-[12.5px] font-semibold text-ink transition-colors hover:border-line-strong">
+      <button
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-[7px]"
+        title="Click to rename speaker (Q)"
+      >
+        <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ backgroundColor: speaker.color_hex }} />
+        {speaker.display_name || speaker.label}
+      </button>
+
+      {matched ? (
+        <span
+          title="Matched to a saved voice profile"
+          className="ml-0.5 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-accent text-on-accent"
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </span>
+      ) : canEnroll ? (
+        <button
+          onClick={handleSaveProfile}
+          disabled={savingProfile}
+          title={`Save "${named}" as a voice profile to recognize them in future meetings`}
+          className="ml-0.5 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full text-ink-3 transition-colors hover:text-accent disabled:opacity-50"
+        >
+          {savingProfile ? (
+            <span className="h-2.5 w-2.5 animate-spin rounded-full border border-ink-3 border-t-transparent" />
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="8" r="3.5" />
+              <path d="M3.5 19a6 6 0 0 1 11 0" />
+              <path d="M18 8v6M21 11h-6" />
+            </svg>
+          )}
+        </button>
+      ) : null}
+    </span>
   );
 }

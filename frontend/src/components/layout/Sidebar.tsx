@@ -8,6 +8,7 @@ import { useTheme } from "@/lib/useTheme";
 import { meetings as meetingsApi } from "@/lib/api";
 import { MeetingListOut } from "@/lib/types";
 import { Logo } from "./Logo";
+import { FolderNav } from "./FolderNav";
 import { MiniCalendar } from "@/components/calendar/MiniCalendar";
 import {
   WaveIcon,
@@ -142,6 +143,11 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Folders */}
+      <Suspense fallback={<div className="h-24" />}>
+        <FolderNav />
+      </Suspense>
 
       {/* Calendar */}
       <div className="mt-4 border-t border-line px-4 pt-4">

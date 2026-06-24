@@ -124,6 +124,38 @@ SETTINGS_SCHEMA: list[dict] = [
         "type": "text",
         "restart_required": False,
     },
+    {
+        "key": "retention_mode",
+        "label": "Retention Mode",
+        "section": "Retention",
+        "description": (
+            "Automatic cleanup of old recordings. 'audio_only' deletes the media "
+            "file but keeps the transcript, notes and summary; 'all' deletes the "
+            "whole meeting. Pinned meetings are always kept."
+        ),
+        "type": "select",
+        "options": ["off", "audio_only", "all"],
+        "restart_required": False,
+    },
+    {
+        "key": "retention_days",
+        "label": "Retention Age (days)",
+        "section": "Retention",
+        "description": "Delete recordings older than this many days. 0 disables retention.",
+        "type": "number",
+        "restart_required": False,
+    },
+    {
+        "key": "voice_match_threshold",
+        "label": "Voice Match Threshold",
+        "section": "Voice profiles",
+        "description": (
+            "Cosine similarity (0–1) required to auto-label a diarized speaker "
+            "from a saved voice profile. Higher = stricter. Requires diarization."
+        ),
+        "type": "float",
+        "restart_required": False,
+    },
 ]
 
 # Keys that are sensitive — value is masked on read
@@ -147,7 +179,18 @@ def _coerce(key: str, raw: str) -> Any:
         return raw.lower() in ("true", "1", "yes")
     if entry["type"] == "number":
         return int(raw)
+    if entry["type"] == "float":
+        return float(raw)
     return raw
+
+
+def _is_unit_float(v: str) -> bool:
+    """True if v parses as a float in [0, 1]."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= f <= 1.0
 
 
 def _validate_cors_origins(v: str) -> bool:
@@ -167,6 +210,9 @@ _SETTING_VALIDATORS: dict[str, Any] = {
     "max_upload_bytes":        lambda v: v.isdigit() and 1 <= int(v) <= 10 * 1024 ** 3,
     "access_token_expire_minutes": lambda v: v.isdigit() and int(v) >= 5,
     "cors_origins":            _validate_cors_origins,
+    "retention_mode":          lambda v: v in ["off", "audio_only", "all"],
+    "retention_days":          lambda v: v.isdigit() and 0 <= int(v) <= 36500,
+    "voice_match_threshold":   _is_unit_float,
 }
 
 
@@ -300,20 +346,34 @@ async def _check_redis() -> dict:
         return _diag("redis", "Redis / job queue", "App", "fail", f"{type(e).__name__}: {e}")
 
 
+def _model_present(names: list[str], want: str) -> bool:
+    base_want = want.split(":")[0]
+    return any(n == want or n.split(":")[0] == base_want for n in names)
+
+
 async def _check_ollama() -> dict:
     base = (settings.ollama_base_url or "").rstrip("/")
     want = settings.ollama_model or ""
+    embed = settings.ollama_embed_model or ""
     try:
         async with httpx.AsyncClient(timeout=5.0) as c:
             resp = await c.get(f"{base}/api/tags")
             resp.raise_for_status()
             names = [m.get("name", "") for m in resp.json().get("models", [])]
-        base_want = want.split(":")[0]
-        if any(n == want or n.split(":")[0] == base_want for n in names):
-            return _diag("ollama", "Ollama", "Summarization", "ok", f"Reachable; model '{want}' is available")
+
+        missing = []
+        if not _model_present(names, want):
+            missing.append(want)
+        if embed and not _model_present(names, embed):
+            missing.append(embed)
+
+        if not missing:
+            return _diag("ollama", "Ollama", "Summarization", "ok",
+                         f"Reachable; models '{want}' and '{embed}' are available")
         return _diag(
             "ollama", "Ollama", "Summarization", "warn",
-            f"Reachable, but model '{want}' is not pulled. Run: ollama pull {want}",
+            "Reachable, but not pulled: " + ", ".join(missing)
+            + f". Run: {'; '.join(f'ollama pull {m}' for m in missing)}",
         )
     except Exception as e:
         return _diag("ollama", "Ollama", "Summarization", "fail", f"Unreachable at {base or '(unset)'}: {type(e).__name__}")

@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_ready
 
 from app.config import settings
@@ -34,6 +35,18 @@ celery_app.conf.update(
     task_routes={
         "app.workers.tasks.process_meeting": {"queue": "transcription"},
         "app.workers.tasks.summarize_meeting": {"queue": "default"},
+        "embed_meeting": {"queue": "default"},
+        "apply_retention": {"queue": "default"},
+    },
+
+    # Periodic tasks (run by `celery beat`). The retention task is a no-op
+    # unless retention_mode/retention_days are configured, so it's safe to
+    # schedule unconditionally.
+    beat_schedule={
+        "apply-retention-daily": {
+            "task": "apply_retention",
+            "schedule": crontab(hour="3", minute="30"),  # 03:30 UTC daily
+        },
     },
 
     # Timeouts — large files with diarization can take several hours
@@ -66,6 +79,8 @@ def apply_db_settings(**kwargs):
                     coerced = row.value.lower() in ("true", "1", "yes")
                 elif isinstance(current, int):
                     coerced = int(row.value)
+                elif isinstance(current, float):
+                    coerced = float(row.value)
                 else:
                     coerced = row.value
                 setattr(settings, row.key, coerced)

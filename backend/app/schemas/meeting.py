@@ -50,6 +50,9 @@ class MeetingUpdate(BaseModel):
     tags: Optional[list[str]] = None
     recorded_at: Optional[datetime] = None
     calendar_event_id: Optional[uuid.UUID] = None
+    # Use the sentinel-free PATCH semantics: include folder_id=null to unfile.
+    folder_id: Optional[uuid.UUID] = None
+    retention_exempt: Optional[bool] = None
 
     @field_validator("title")
     @classmethod
@@ -89,6 +92,8 @@ class MeetingOut(BaseModel):
     description: Optional[str]
     tags: Optional[list]
     recorded_at: Optional[datetime]
+    folder_id: Optional[uuid.UUID] = None
+    retention_exempt: bool = False
     summary: Optional[str] = None
     created_at: datetime
     updated_at: datetime

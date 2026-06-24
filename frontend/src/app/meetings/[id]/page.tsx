@@ -9,6 +9,7 @@ import {
   jobs as jobsApi,
   media as mediaApi,
   notes as notesApi,
+  voiceProfilesApi,
   exportTranscript,
 } from "@/lib/api";
 import { Meeting, TranscriptSegment, Speaker, Job, Note, NoteType } from "@/lib/types";
@@ -22,6 +23,8 @@ import { WaveformPlayer } from "@/components/ui/WaveformPlayer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { NotesPanel } from "@/components/notes/NotesPanel";
+import { MeetingMetaBar } from "@/components/meeting/MeetingMetaBar";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { SummaryPanel, SummaryPending } from "@/components/summary/SummaryPanel";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackIcon, ChevronIcon, DownloadIcon } from "@/components/ui/icons";
@@ -205,6 +208,17 @@ export default function MeetingPage() {
     );
   };
 
+  const handleSaveVoiceProfile = async (speakerId: string, name: string) => {
+    try {
+      const profile = await voiceProfilesApi.enroll(speakerId, name);
+      setSpeakers((prev) =>
+        prev.map((s) => (s.id === speakerId ? { ...s, voice_profile_id: profile.id, display_name: name } : s))
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not save voice profile");
+    }
+  };
+
   const seek = (t: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = t;
@@ -273,6 +287,14 @@ export default function MeetingPage() {
           )}
         </div>
 
+        {/* Folder + tags */}
+        <div className="mb-[22px]">
+          <MeetingMetaBar
+            meeting={meeting}
+            onChange={(patch) => setMeeting((m) => (m ? { ...m, ...patch } : m))}
+          />
+        </div>
+
         {/* Body */}
         {isProcessing ? (
           <JobProgressBar job={job} />
@@ -296,6 +318,7 @@ export default function MeetingPage() {
               onSeek={seek}
               onSegmentUpdate={handleSegmentUpdate}
               onSpeakerRename={handleSpeakerRename}
+              onSaveVoiceProfile={handleSaveVoiceProfile}
               onAddNote={handleAddNoteFromTranscript}
             />
 
@@ -326,6 +349,8 @@ export default function MeetingPage() {
             ) : meeting.status === "transcribed" ? (
               <SummaryPending onGenerate={async () => { await meetingsApi.summarize(id); }} />
             ) : null}
+
+            <ChatPanel meetingId={id} onSeek={audioSrc ? seek : undefined} />
 
             <NotesPanel
               notes={notesList}

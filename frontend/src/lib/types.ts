@@ -29,10 +29,47 @@ export interface Meeting {
   status: MeetingStatus;
   description: string | null;
   tags: string[] | null;
+  folder_id: string | null;
+  retention_exempt: boolean;
   recorded_at: string | null;
   summary: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ── Folders & tags ─────────────────────────────────────────────────────────
+export interface Folder {
+  id: string;
+  user_id: string;
+  name: string;
+  color_hex: string;
+  created_at: string;
+  meeting_count: number;
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+// ── Transcript chat ────────────────────────────────────────────────────────
+export interface ChatCitation {
+  start_time: number;
+  snippet: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations: ChatCitation[] | null;
+  created_at: string;
+}
+
+export interface ChatThread {
+  indexed: boolean;
+  chunk_count: number;
+  messages: ChatMessage[];
 }
 
 export interface MeetingListOut {
@@ -50,6 +87,17 @@ export interface Speaker {
   display_name: string | null;
   color_hex: string;
   avatar_url: string | null;
+  voice_profile_id: string | null;
+}
+
+// ── Voice profiles ─────────────────────────────────────────────────────────
+export interface VoiceProfile {
+  id: string;
+  user_id: string;
+  name: string;
+  sample_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 // ── Transcript ─────────────────────────────────────────────────────────────

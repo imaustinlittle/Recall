@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, Date
+from sqlalchemy import select, func, cast, Date, true
 
 from app.database import get_async_db
 from app.deps import get_current_user
@@ -19,6 +19,11 @@ async def list_meetings(
     status: models.MeetingStatus | None = None,
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
+    folder: str | None = Query(
+        None,
+        description="Folder UUID to filter by, or the literal 'none' for unfiled meetings.",
+    ),
+    tag: str | None = Query(None, max_length=100),
     db: AsyncSession = Depends(get_async_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -29,6 +34,18 @@ async def list_meetings(
         q = q.where(cast(models.Meeting.created_at, Date) >= date_from)
     if date_to:
         q = q.where(cast(models.Meeting.created_at, Date) <= date_to)
+    if folder is not None:
+        if folder.lower() in ("none", "unfiled", ""):
+            q = q.where(models.Meeting.folder_id.is_(None))
+        else:
+            try:
+                folder_uuid = uuid.UUID(folder)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid folder id")
+            q = q.where(models.Meeting.folder_id == folder_uuid)
+    if tag:
+        # JSONB array containment: tags @> '["<tag>"]'
+        q = q.where(models.Meeting.tags.contains([tag]))
     q = q.order_by(models.Meeting.created_at.desc())
 
     total_result = await db.execute(
@@ -53,6 +70,30 @@ async def create_meeting(
     await db.commit()
     await db.refresh(meeting)
     return meeting
+
+
+@router.get("/tags")
+async def list_tags(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Return every distinct tag the user has used, with a usage count.
+    Unnests the JSONB tags array across all the user's meetings.
+    """
+    # Unnest tags via an explicit LATERAL join so `meetings` is anchored first
+    # in the FROM clause (Postgres requires the table to precede the function).
+    tags_fn = func.jsonb_array_elements_text(models.Meeting.tags).table_valued("value").lateral("t")
+    result = await db.execute(
+        select(tags_fn.c.value.label("tag"), func.count().label("count"))
+        .select_from(models.Meeting)
+        .join(tags_fn, true())
+        .where(models.Meeting.user_id == current_user.id)
+        .where(models.Meeting.tags.isnot(None))
+        .group_by(tags_fn.c.value)
+        .order_by(func.count().desc(), tags_fn.c.value)
+    )
+    return [{"tag": row.tag, "count": row.count} for row in result.all()]
 
 
 @router.get("/{meeting_id}", response_model=MeetingOut)

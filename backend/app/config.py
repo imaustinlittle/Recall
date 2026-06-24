@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     use_diarization: bool = False
     huggingface_token: str = ""
 
+    # Voice profiles — recognize speakers across meetings (requires diarization).
+    # voice_match_threshold is a cosine SIMILARITY in [0, 1]; a diarized speaker
+    # is auto-labeled with a saved profile only when similarity >= threshold.
+    # Conservative by default so it never confidently mislabels.
+    voice_embed_model: str = "pyannote/embedding"
+    voice_match_threshold: float = 0.75
+
     # Auth
     secret_key: str
     access_token_expire_minutes: int = 10080  # 7 days
@@ -79,6 +86,19 @@ class Settings(BaseSettings):
     # Summarization (Ollama)
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.1:8b"
+
+    # Embeddings (Ollama) — used for transcript chat / RAG retrieval.
+    # The embedding dimension must match the model; nomic-embed-text → 768.
+    # Changing the model requires re-indexing existing meetings.
+    ollama_embed_model: str = "nomic-embed-text"
+
+    # Retention — automatic cleanup of old recordings.
+    #   retention_mode: "off"        → never auto-delete (default)
+    #                   "audio_only" → delete the media file, keep transcript/notes/summary
+    #                   "all"        → delete the entire meeting and its data
+    # retention_days: age threshold; 0 disables regardless of mode.
+    retention_mode: str = "off"
+    retention_days: int = 0
 
     # App
     environment: str = "development"

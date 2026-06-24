@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { speakersApi } from "@/lib/api";
+import { speakersApi, voiceProfilesApi } from "@/lib/api";
+import { VoiceProfile } from "@/lib/types";
 import { useAuth } from "@/lib/useAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { Spinner } from "@/components/ui/Spinner";
-import { UsersIcon } from "@/components/ui/icons";
+import { UsersIcon, MicIcon, TrashIcon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/utils";
 
 interface SpeakerProfile {
@@ -36,13 +37,33 @@ export default function SpeakersPage() {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
 
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
+
   useEffect(() => {
     if (!user) return;
     speakersApi
       .listAll()
       .then((d) => setProfiles(d as SpeakerProfile[]))
       .finally(() => setLoading(false));
+    voiceProfilesApi.list().then(setVoiceProfiles).catch(() => {});
   }, [user]);
+
+  const handleRenameVoice = async (id: string, current: string) => {
+    const name = prompt("Rename voice profile", current);
+    if (!name || name.trim() === current) return;
+    try {
+      const updated = await voiceProfilesApi.rename(id, name.trim());
+      setVoiceProfiles((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch { /* ignore */ }
+  };
+
+  const handleDeleteVoice = async (id: string, name: string) => {
+    if (!confirm(`Delete voice profile "${name}"? Speakers already labeled stay as-is.`)) return;
+    try {
+      await voiceProfilesApi.delete(id);
+      setVoiceProfiles((prev) => prev.filter((p) => p.id !== id));
+    } catch { /* ignore */ }
+  };
 
   const handleSelect = async (name: string) => {
     if (selected === name) {
@@ -76,6 +97,52 @@ export default function SpeakersPage() {
         <p className="mt-1 text-[14px] text-ink-2">
           {profiles.length} unique name{profiles.length === 1 ? "" : "s"} across your meetings
         </p>
+
+        {/* Voice profiles */}
+        {voiceProfiles.length > 0 && (
+          <section className="mt-7 overflow-hidden rounded-[16px] border border-line bg-surface shadow-card-sm">
+            <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-5 py-3">
+              <MicIcon size={15} className="text-accent" />
+              <h2 className="font-mono text-[11.5px] font-semibold uppercase tracking-[.1em] text-ink-2">
+                Voice profiles
+              </h2>
+              <span className="font-mono text-[11px] text-ink-3">
+                {voiceProfiles.length} enrolled — used to auto-label speakers in new recordings
+              </span>
+            </div>
+            <ul>
+              {voiceProfiles.map((vp) => (
+                <li
+                  key={vp.id}
+                  className="group flex items-center gap-3 border-b border-line px-5 py-3 last:border-b-0"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-weak text-[14px] font-bold text-accent">
+                    {vp.name.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-semibold text-ink">{vp.name}</p>
+                    <p className="font-mono text-[11px] text-ink-3">
+                      {vp.sample_count} sample{vp.sample_count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRenameVoice(vp.id, vp.name)}
+                    className="rounded-[8px] px-2.5 py-1 text-[12.5px] font-semibold text-ink-2 opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => handleDeleteVoice(vp.id, vp.name)}
+                    title="Delete voice profile"
+                    className="rounded-lg p-1.5 text-ink-3 opacity-0 transition-opacity hover:text-status-red group-hover:opacity-100"
+                  >
+                    <TrashIcon size={16} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-24">

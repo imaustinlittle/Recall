@@ -25,12 +25,17 @@ x-backend-common: &backend-common
     WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
     USE_DIARIZATION: ${USE_DIARIZATION:-false}
     HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
+    VOICE_EMBED_MODEL: ${VOICE_EMBED_MODEL:-pyannote/embedding}
+    VOICE_MATCH_THRESHOLD: ${VOICE_MATCH_THRESHOLD:-0.75}
     CORS_ORIGINS: ${CORS_ORIGINS}
     MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2147483648}
     ENVIRONMENT: ${ENVIRONMENT:-production}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
     OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
     OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+    OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+    RETENTION_MODE: ${RETENTION_MODE:-off}
+    RETENTION_DAYS: ${RETENTION_DAYS:-0}
   volumes:
     - media_files:/data/media
   depends_on:
@@ -46,7 +51,10 @@ services:
 
   # ── Database ───────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    # pgvector image = stock Postgres 16 + the `vector` extension (used for
+    # transcript-chat RAG and voice-profile matching). Data dir is compatible
+    # with the previous postgres:16-alpine volume.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -99,12 +107,17 @@ services:
       WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
       USE_DIARIZATION: ${USE_DIARIZATION:-false}
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
+      VOICE_EMBED_MODEL: ${VOICE_EMBED_MODEL:-pyannote/embedding}
+      VOICE_MATCH_THRESHOLD: ${VOICE_MATCH_THRESHOLD:-0.75}
       CORS_ORIGINS: ${CORS_ORIGINS}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2147483648}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      RETENTION_MODE: ${RETENTION_MODE:-off}
+      RETENTION_DAYS: ${RETENTION_DAYS:-0}
       CUDA_VISIBLE_DEVICES: "0"
     deploy:
       resources:
@@ -113,6 +126,15 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  # ── Celery beat (periodic tasks: retention cleanup) ────────────────────────
+  beat:
+    <<: *backend-common
+    command: >
+      celery -A app.workers.celery_app beat
+        --loglevel=info
+        --schedule=/tmp/celerybeat-schedule
+    # Beat only needs config + Redis; no GPU. It enqueues jobs the worker runs.
 
   # ── Celery monitor (run with: docker compose --profile dev up flower) ──────
   flower:

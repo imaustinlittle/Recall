@@ -8,12 +8,16 @@ Self-hosted meeting transcription platform. Record live audio or upload existing
 
 - **Transcription** — local Whisper model (tiny → large-v3), no cloud API
 - **Speaker diarization** — optional pyannote.audio labels each speaker
+- **Voice profiles** — optionally recognize the same person across meetings: save a named speaker as a profile and future diarized recordings auto-label them
 - **Transcript editor** — inline editing, split/merge segments, speaker renaming
 - **AI summary** — auto-generated via local Ollama LLM after transcription; re-runnable after renaming speakers
+- **Transcript chat (RAG)** — ask questions about a meeting and get answers grounded in the transcript, with clickable timestamp citations; runs fully locally (Ollama embeddings + pgvector retrieval)
 - **Summary → Notes** — one-click import of action items and decisions from the summary into structured notes
 - **Timestamped notes** — general, action item, decision, and question note types linked to audio timestamps; keyboard shortcut (D) while listening
+- **Retention policies** — optional daily auto-cleanup of recordings past a configurable age; delete audio only (keep the transcript) or the whole meeting, with per-meeting "Keep" pinning to exempt important ones
 - **Export** — TXT, Markdown, SRT, VTT, PDF
 - **Full-text search** — search across meeting titles, transcripts, and notes
+- **Folders & tags** — organize meetings into colored folders and filter the library by folder or tag
 - **Speaker profiles** — see all unique speaker names across meetings and which recordings they appear in
 - **Calendar sidebar** — browse meetings by date; dot indicators on days with recordings
 - **Keyboard shortcuts** — A (back 10s), S (play/pause), D (add note), F (forward 10s), Q (rename speaker)
@@ -26,11 +30,12 @@ Self-hosted meeting transcription platform. Record live audio or upload existing
 |---|---|
 | Frontend | Next.js 14, Tailwind CSS, TypeScript |
 | Backend | Python FastAPI |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 16 + pgvector |
 | Queue | Redis + Celery |
 | Transcription | faster-whisper (local) |
 | Diarization | pyannote.audio 3 (optional) |
 | Summarization | Ollama (local LLM, default: llama3.1:8b) |
+| Chat / embeddings | Ollama (default: nomic-embed-text) + pgvector |
 | Storage | Local filesystem / MinIO (S3-compatible) |
 | Proxy | Traefik (production) |
 
@@ -117,15 +122,69 @@ Or enable it from the **Settings** page in the UI without rebuilding.
 
 ---
 
+## Voice profiles (optional)
+
+When diarization is on, Recall can recognize the **same speaker across different
+meetings**. After a recording is transcribed, rename a speaker (e.g. "Alice") and
+click the small **save-as-profile** icon on their chip. Recall stores a voice
+embedding for that person; future diarized recordings compare each speaker against
+your saved profiles and auto-label matches.
+
+Requirements (in addition to diarization):
+
+1. Accept the embedding model license at https://huggingface.co/pyannote/embedding
+   (uses the same `HUGGINGFACE_TOKEN`).
+2. Tune `VOICE_MATCH_THRESHOLD` (cosine similarity, `0`–`1`; default `0.75`) in
+   `.env` or **Settings**. Higher is stricter — raise it if you see false matches,
+   lower it if known speakers aren't being recognized.
+
+Matching is conservative by design: below the threshold a speaker is left as
+"Speaker N" rather than risking a wrong name. Manage saved profiles on the
+**Speakers** page.
+
+---
+
 ## AI summarization (Ollama)
 
 Summaries run locally via Ollama. On first deploy, pull the model:
 
 ```bash
 docker exec recall_ollama ollama pull llama3.1:8b
+docker exec recall_ollama ollama pull nomic-embed-text
 ```
 
-This is a one-time ~5 GB download. Summaries generate automatically after transcription completes, or can be triggered manually from the meeting page. The model can be changed from the **Settings** page.
+The first is a one-time ~5 GB download for summaries and chat answers; the second is a small (~275 MB) embedding model used for transcript chat retrieval. Summaries generate automatically after transcription completes, or can be triggered manually from the meeting page. Models can be changed from the **Settings** page.
+
+### Transcript chat (RAG)
+
+Each meeting has a **Chat** panel. The first time you open it, click **Index this
+meeting** (this also happens automatically right after transcription) — Recall
+splits the transcript into chunks, embeds them with `nomic-embed-text`, and stores
+the vectors in pgvector. Questions are answered by retrieving the most relevant
+chunks and asking your local LLM, with clickable timestamp citations that jump the
+audio to the cited moment. Nothing leaves the host.
+
+---
+
+## Retention (auto-cleanup)
+
+A daily `beat` job can automatically remove recordings once they pass a
+configurable age. **Disabled by default.** Configure via `.env` or the
+**Settings** page:
+
+```bash
+RETENTION_MODE=off          # off | audio_only | all
+RETENTION_DAYS=0            # delete recordings older than N days (0 disables)
+```
+
+- `audio_only` deletes the media file but **keeps** the transcript, notes and
+  summary — useful for reclaiming disk while preserving the searchable record.
+- `all` deletes the whole meeting and its data.
+- Any meeting can be **pinned ("Keep")** from its page to exempt it from cleanup.
+
+The sweep runs at 03:30 UTC daily via the `beat` service (included in both
+compose files). Age is measured from the recording date when known, otherwise
+the creation date.
 
 ---
 
@@ -232,6 +291,9 @@ recall/
 | ✅ | Speaker profiles across meetings |
 | ✅ | Calendar sidebar with per-day filtering |
 | ✅ | Keyboard shortcuts for audio navigation |
+| ✅ | Folders & tags for organizing the library |
+| ✅ | Retention policies (auto-cleanup of old recordings) |
+| ✅ | Q&A over transcript (RAG) with timestamp citations |
+| ✅ | Voice profiles (recognize speakers across meetings) |
 | 🔄 | Calendar / CalDAV sync |
-| 🔄 | Q&A over transcript (RAG) |
 | 🔄 | Multi-user / team workspaces |

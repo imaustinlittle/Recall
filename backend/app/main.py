@@ -15,7 +15,7 @@ from app.database import AsyncSessionLocal
 from app import models
 from app.limiter import limiter
 from app.routers import auth, meetings, upload, transcript, speakers, jobs
-from app.routers import admin, notes, export, search
+from app.routers import admin, notes, export, search, folders, chat, voice
 
 logging.basicConfig(
     level=settings.log_level,
@@ -43,6 +43,8 @@ async def _apply_db_settings() -> None:
                     coerced = row.value.lower() in ("true", "1", "yes")
                 elif isinstance(current, int):
                     coerced = int(row.value)
+                elif isinstance(current, float):
+                    coerced = float(row.value)
                 else:
                     coerced = row.value
                 setattr(settings, row.key, coerced)
@@ -114,6 +116,9 @@ app.include_router(admin.router,      prefix="/api/admin",    tags=["admin"])
 app.include_router(notes.router,      prefix="/api",          tags=["notes"])
 app.include_router(export.router,     prefix="/api",          tags=["export"])
 app.include_router(search.router,     prefix="/api",          tags=["search"])
+app.include_router(folders.router,    prefix="/api",          tags=["folders"])
+app.include_router(chat.router,       prefix="/api",          tags=["chat"])
+app.include_router(voice.router,      prefix="/api",          tags=["voice"])
 
 
 @app.get("/api/health", tags=["health"])
