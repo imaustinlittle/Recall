@@ -51,6 +51,9 @@ x-backend-common: &backend-common
     OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
     OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
     OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+    # ── Voice profiles (also settable from the admin UI) ──────────────────
+    VOICE_EMBED_MODEL: ${VOICE_EMBED_MODEL:-pyannote/embedding}
+    VOICE_MATCH_THRESHOLD: ${VOICE_MATCH_THRESHOLD:-0.75}
     # ── Retention (also settable from the admin UI) ───────────────────────
     RETENTION_MODE: ${RETENTION_MODE:-off}
     RETENTION_DAYS: ${RETENTION_DAYS:-0}
