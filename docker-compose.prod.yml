@@ -21,6 +21,7 @@ x-backend-common: &backend-common
     - media_files:/data/media
   networks:
     - internal
+    - ollama_default   # external network of the existing Ollama container
   depends_on:
     postgres:
       condition: service_healthy
@@ -219,6 +220,9 @@ networks:
   internal:
     driver: bridge
   traefik_proxy:
+    external: true
+  # The existing Ollama container's network, so the backend can reach it by name.
+  ollama_default:
     external: true
 
 volumes:

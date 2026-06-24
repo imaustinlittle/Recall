@@ -46,6 +46,7 @@ x-backend-common: &backend-common
   restart: unless-stopped
   networks:
     - internal
+    - ollama_default   # external network of the existing Ollama container
 
 services:
 
@@ -213,6 +214,9 @@ networks:
   traefik_proxy:
     external: true
   media-net:
+    external: true
+  # The existing Ollama container's network, so the backend can reach it by name.
+  ollama_default:
     external: true
 
 volumes:
