@@ -81,6 +81,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Database backups ───────────────────────────────────────────────────────
+  # Nightly pg_dump with rotation. Critical safety net: deploys auto-run Alembic
+  # migrations, and a bad migration can't be undone by a code rollback alone.
+  # Dumps land in the pg_backups volume as gzipped SQL; restore steps in DEPLOY.md.
+  # Tip: bind-mount a NAS path to /backups instead of the named volume to keep
+  # backups off this host.
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pg_backups:/backups
+    environment:
+      POSTGRES_HOST:     postgres
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE:          ${BACKUP_SCHEDULE:-@daily}
+      BACKUP_KEEP_DAYS:  ${BACKUP_KEEP_DAYS:-7}
+      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-6}
+
   # ── Cache / Queue ──────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -231,3 +257,4 @@ volumes:
   media_files:
   minio_data:
   ollama_data:
+  pg_backups:
